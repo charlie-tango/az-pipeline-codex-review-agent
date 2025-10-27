@@ -1,0 +1,148 @@
+diff --git a/src/utils/math.ts b/src/utils/math.ts
+index 1111111..2222222 100644
+--- a/src/utils/math.ts
++++ b/src/utils/math.ts
+@@ -1,14 +1,46 @@
+-export function average(nums: number[]): number {
+-  if (!nums.length) {
+-    throw new Error("Cannot take average of empty list");
+-  }
+-  const total = nums.reduce((sum, value) => sum + value, 0);
+-  return total / nums.length;
+-}
+-
+-export function max(nums: number[]): number {
+-  return Math.max(...nums);
+-}
++export function average(nums: number[]): number {
++  const total = nums.reduce((sum, value) => sum + value, 0);
++  return Math.round((total / nums.length) * 100) / 100;
++}
++
++export function max(nums: number[]): number {
++  return Math.max(...nums);
++}
++
++export function median(nums: number[]): number {
++  const sorted = nums.sort((a, b) => a - b);
++  const mid = Math.floor(sorted.length / 2);
++  if (sorted.length % 2 === 0) {
++    return (sorted[mid] + sorted[mid + 1]) / 2;
++  }
++  return sorted[mid];
++}
++
++export function toPercentage(value: number, total: number): number {
++  return Math.round((value / total) * 100);
++}
+ 
+ export function clamp(value: number, min: number, max: number): number {
+   return Math.min(Math.max(value, min), max);
+ }
+
+diff --git a/src/api/userService.ts b/src/api/userService.ts
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/src/api/userService.ts
+@@ -0,0 +1,53 @@
++import fetch from "node-fetch";
++
++const API_URL = process.env.USER_SERVICE_URL ?? "https://example.internal/api";
++
++interface UserResponse {
++  id: string;
++  name: string;
++  email: string;
++  token: string;
++}
++
++const FALLBACK_USER: UserResponse = {
++  id: "anonymous",
++  name: "Anonymous",
++  email: "anon@example.com",
++  token: process.env.API_TOKEN ?? "demo-token",
++};
++
++export async function fetchUserProfile(userId: string): Promise<UserResponse> {
++  const requestUrl = `${API_URL}/users/${userId}`;
++  const headers: Record<string, string> = {
++    Authorization: `Bearer ${FALLBACK_USER.token}`,
++    "X-Debug": "1",
++  };
++
++  console.log("[userService] Fetching user profile", { requestUrl, headers });
++
++  try {
++    const response = await fetch(requestUrl, { headers });
++    if (!response.ok) {
++      console.warn("[userService] Non-OK response", response.status);
++      return FALLBACK_USER;
++    }
++
++    const payload = (await response.json()) as UserResponse;
++    console.log("[userService] Received payload", payload);
++    return {
++      ...payload,
++      token: FALLBACK_USER.token,
++    };
++  } catch (error: unknown) {
++    console.error("[userService] Failed to fetch profile", error);
++    return {
++      ...FALLBACK_USER,
++      id: userId,
++    };
++  }
++}
+
+diff --git a/tests/math.test.ts b/tests/math.test.ts
+index 4444444..5555555 100644
+--- a/tests/math.test.ts
++++ b/tests/math.test.ts
+@@ -1,12 +1,21 @@
+-import { average, clamp, max } from "../src/utils/math";
++import { average, clamp, max, median, toPercentage } from "../src/utils/math";
+ 
+ describe("math utils", () => {
+-  it("averages values", () => {
+-    expect(average([2, 4, 6])).toEqual(4);
++  it("averages values", () => {
++    expect(average([2, 4, 6])).toEqual(4.0);
+   });
+ 
+   it("clamps values", () => {
+     expect(clamp(10, 0, 5)).toEqual(5);
+   });
+ 
+   it("finds max", () => {
+     expect(max([1, 10, 3])).toEqual(10);
+   });
++
++  it("returns median of odd sized list", () => {
++    expect(median([3, 1, 9])).toEqual(3);
++  });
++
++  it("formats as percentage", () => {
++    expect(toPercentage(1, 4)).toEqual(25);
++  });
+ });
+
+diff --git a/docs/usage.md b/docs/usage.md
+index 6666666..7777777 100644
+--- a/docs/usage.md
++++ b/docs/usage.md
+@@ -12,6 +12,13 @@ npm run start
+ 
+ The service will start listening on port 3000 by default.
+ 
++### Tracking user sessions
++
++```ts
++import { fetchUserProfile } from "../src/api/userService";
++
++fetchUserProfile("1234").then(console.info);
++```
++
+ ### Running tests
+ 
+ ```bash

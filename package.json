@@ -1,0 +1,30 @@
+{
+  "name": "az-pipeline-review-agent",
+  "version": "0.2.0",
+  "description": "Azure Pipelines template and tooling for Codex-based pull request reviews",
+  "license": "MIT",
+  "main": "dist/reviewPr.js",
+  "types": "dist/reviewPr.d.ts",
+  "bin": {
+    "codex-azure-review": "dist/reviewPr.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "review": "ts-node src/reviewPr.ts",
+    "review:local": "ts-node src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug"
+  },
+  "dependencies": {
+    "azure-devops-node-api": "^15.1.1",
+    "openai": "^4.24.1",
+    "yargs": "^17.7.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@types/yargs": "^17.0.32",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.4"
+  },
+  "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d"
+}

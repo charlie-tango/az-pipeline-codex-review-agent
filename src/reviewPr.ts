@@ -132,29 +132,45 @@ function normalizeJsonSchema<T>(input: T): T {
     const record = input as Record<string, unknown>;
 
     for (const key of Object.keys(record)) {
-      if (key === "additionalProperties") {
-        const value = record[key];
-        if (value === false) {
-          record[key] = {
-            type: "object",
-            additionalProperties: false,
-          };
-          record[key] = normalizeJsonSchema({
-            type: "object",
-            additionalProperties: false,
-          });
-        } else {
-          record[key] = normalizeJsonSchema(value);
+      if (key === "additionalProperties" && record[key] === false) {
+        if (typeof record.type !== "string") {
+          record.type = "object";
         }
-      } else {
-        record[key] = normalizeJsonSchema(record[key]);
+        continue;
       }
+
+      record[key] = normalizeJsonSchema(record[key]);
     }
 
     return record as unknown as T;
   }
 
   return input;
+}
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = ms / 1000;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds - hours * 3600 - minutes * 60;
+
+  const parts: string[] = [];
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+
+  if (hours > 0 || minutes > 0) {
+    const wholeSeconds = Math.floor(seconds);
+    parts.push(`${wholeSeconds}s`);
+  } else {
+    const roundedSeconds = Math.round(seconds * 10) / 10;
+    parts.push(`${roundedSeconds.toFixed(1)}s`);
+  }
+
+  return parts.join(" ");
 }
 
 type CliOptions = z.infer<typeof ArgsSchema>;
@@ -390,25 +406,33 @@ async function loadDiff(options: CliOptions): Promise<string> {
     return readFileSync(diffPath, "utf8");
   }
 
+  let targetBranch = options.targetBranch;
   const errors: string[] = [];
 
-  if (options.prId) {
+  if (options.prId && !targetBranch) {
     try {
-      logger.info("Fetching diff for PR #%s from Azure DevOps", options.prId);
-      return await azureDiff(options);
+      const resolved = await resolvePullRequestTargetBranch(options);
+      if (resolved) {
+        targetBranch = resolved;
+        logger.info(
+          "Resolved target branch %s from Azure DevOps for PR #%s",
+          targetBranch,
+          options.prId,
+        );
+      }
     } catch (error) {
       const message = (error as Error).message;
       logger.warn(
-        "Azure DevOps PR diff failed (%s); will attempt git diff if possible",
+        "Failed to resolve target branch from Azure DevOps: %s",
         message,
       );
       errors.push(message);
     }
   }
 
-  if (options.targetBranch) {
+  if (targetBranch) {
     try {
-      return await gitDiff(options);
+      return await gitDiff({ ...options, targetBranch });
     } catch (error) {
       const message = (error as Error).message;
       logger.warn("git diff failed: %s", message);
@@ -423,7 +447,7 @@ async function loadDiff(options: CliOptions): Promise<string> {
   }
 
   throw new ReviewError(
-    "No diff source available. Provide --diff-file, --pr-id, or --target-branch.",
+    "No diff source available. Provide --diff-file or ensure PR metadata is accessible.",
   );
 }
 
@@ -537,24 +561,27 @@ function buildPrompt(files: FileDiff[]): string {
   return sections.join("\n\n");
 }
 
-async function azureDiff(options: CliOptions): Promise<string> {
+async function resolvePullRequestTargetBranch(
+  options: CliOptions,
+): Promise<string | undefined> {
   if (!options.prId) {
-    throw new ReviewError("PR ID is required to fetch diff from Azure DevOps.");
+    return undefined;
   }
 
-  const command = ["az", "repos", "pr", "diff", "--id", String(options.prId)];
-  if (options.project) {
-    command.push("--project", options.project);
-  }
-  if (options.repository) {
-    command.push("--repository", options.repository);
-  }
-  if (options.organization) {
-    command.push("--organization", options.organization);
+  if (!options.azureToken) {
+    throw new ReviewError(
+      "Azure DevOps PAT is required to resolve pull request target branch.",
+    );
   }
 
-  logger.info("Fetching diff from Azure DevOps for PR #%s", options.prId);
-  return await runCommand(command);
+  const { gitApi, repositoryId } = await ensureGitClient(options);
+  const pr = await gitApi.getPullRequest(
+    repositoryId,
+    options.prId,
+    options.project,
+  );
+
+  return pr?.targetRefName ?? undefined;
 }
 
 async function callCodex(
@@ -980,6 +1007,8 @@ async function main(): Promise<void> {
   const options = parseArgs();
   logger = createLogger(options.debug);
 
+  const startTime = Date.now();
+
   try {
     const diffText = await loadDiff(options);
     const fileDiffs = parseUnifiedDiff(diffText);
@@ -1015,7 +1044,10 @@ async function main(): Promise<void> {
     }
     await postOverallComment(options, review, gitApi, repositoryId);
     await postSuggestions(options, review, gitApi, repositoryId);
-    logger.info("Review completed successfully.");
+    const elapsedMs = Date.now() - startTime;
+    logger.info(
+      `Review completed successfully in ${formatElapsed(elapsedMs)}.`,
+    );
   } catch (error) {
     const message =
       error instanceof ReviewError ? error.message : (error as Error).message;

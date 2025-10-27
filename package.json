@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build",
+    "prepare": "npm run build && husky install",
     "lint": "biome lint",
     "lint:fix": "biome lint --write",
     "review": "ts-node src/reviewPr.ts",
@@ -26,8 +26,13 @@
     "@types/node": "^20.12.7",
     "@types/yargs": "^17.0.32",
     "@biomejs/biome": "^1.7.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.4"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,md}": "pnpm exec biome lint --fix"
   },
   "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d"
 }

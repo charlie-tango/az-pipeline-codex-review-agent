@@ -23,6 +23,29 @@ Local dry run:
 pnpm run review:local
 ```
 
+Simulate the Azure Pipelines job locally:
+
+```bash
+./scripts/run_pipeline_local.sh
+```
+
+Azure Pipelines YAML (`azure-pipelines.yml`) runs the same steps on an agent. Set secrets `OPENAI_API_KEY` and `AZURE_DEVOPS_PAT`, and optionally `REVIEW_TIME_BUDGET`.
+
+### Azure Pipelines template
+
+Copy this minimal pipeline into your project to invoke the included template:
+
+```yaml
+extends:
+  template: templates/codex-review.yml
+  parameters:
+    reviewTimeBudget: '20'
+    packageVersion: 'latest'
+    dryRun: false
+```
+
+Secrets `OPENAI_API_KEY` and `AZURE_DEVOPS_PAT` must be defined in the pipeline. Set `dryRun: true` if you want logs only without posting review comments.
+
 ## Codex contract
 
 Codex returns JSON matching this schema (enforced with Zod):

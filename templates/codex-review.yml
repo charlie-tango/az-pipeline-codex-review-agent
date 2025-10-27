@@ -1,0 +1,49 @@
+parameters:
+  - name: nodeVersion
+    type: string
+    default: "20.x"
+  - name: reviewTimeBudget
+    type: string
+    default: "20"
+  - name: dryRun
+    type: boolean
+    default: false
+  - name: packageVersion
+    type: string
+    default: latest
+
+stages:
+  - stage: CodexReview
+    displayName: Codex Review
+    jobs:
+      - job: Review
+        displayName: Run Codex Review
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: NodeTool@0
+            displayName: Use Node.js
+            inputs:
+              versionSpec: ${{ parameters.nodeVersion }}
+
+          - script: |
+              set -euxo pipefail
+              npm install -g pnpm@8
+              pnpm install --frozen-lockfile=false
+            displayName: Install dependencies
+
+          - script: |
+              set -euxo pipefail
+              ARGS=""
+              if [ "$REVIEW_DRY_RUN" = "true" ]; then
+                ARGS="$ARGS --dry-run"
+              fi
+              npx @charlietango/az-pipeline-codex-review-agent@${{ parameters.packageVersion }} \
+                --review-time-budget "$REVIEW_TIME_BUDGET" \
+                $ARGS
+            displayName: Run Codex review
+            env:
+              OPENAI_API_KEY: $(OPENAI_API_KEY)
+              AZURE_DEVOPS_PAT: $(AZURE_DEVOPS_PAT)
+              REVIEW_TIME_BUDGET: ${{ parameters.reviewTimeBudget }}
+              REVIEW_DRY_RUN: ${{ parameters.dryRun }}

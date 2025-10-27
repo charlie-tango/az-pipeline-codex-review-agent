@@ -1,7 +1,7 @@
 {
-  "name": "az-pipeline-review-agent",
+  "name": "@charlietango/az-pipeline-review-agent",
   "version": "0.2.0",
-  "description": "Azure Pipelines template and tooling for Codex-based pull request reviews",
+  "description": "script for reviewing pull requests using OpenAI's models and publishing feedback to Azure DevOps",
   "license": "MIT",
   "main": "dist/reviewPr.js",
   "types": "dist/reviewPr.d.ts",

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
-import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { Codex } from "@openai/codex-sdk";
 import azdev from "azure-devops-node-api";
 import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
-import { Codex } from "@openai/codex-sdk";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { z } from "zod";
@@ -96,10 +96,7 @@ const FindingSchema = z
     line: integerFromString.optional(),
     title: z.string().optional(),
     details: z.string().optional(),
-    suggestion: z
-      .union([SuggestionDetailsSchema, z.null()])
-      .optional()
-      .default(null),
+    suggestion: z.union([SuggestionDetailsSchema, z.null()]).optional().default(null),
   })
   .passthrough();
 
@@ -225,18 +222,10 @@ const ArgsSchema = z.object({
     .int("pr-id must be an integer")
     .positive("pr-id must be positive")
     .optional(),
-  organization: z
-    .string()
-    .trim()
-    .min(1, "organization cannot be empty")
-    .optional(),
+  organization: z.string().trim().min(1, "organization cannot be empty").optional(),
   project: z.string().trim().min(1, "project cannot be empty").optional(),
   repository: z.string().trim().min(1, "repository cannot be empty").optional(),
-  repositoryId: z
-    .string()
-    .trim()
-    .uuid("repository-id must be a valid UUID")
-    .optional(),
+  repositoryId: z.string().trim().uuid("repository-id must be a valid UUID").optional(),
   targetBranch: z.string().trim().optional(),
   sourceRef: z.string().trim().optional(),
   diffFile: z.string().trim().optional(),
@@ -261,11 +250,7 @@ const ArgsSchema = z.object({
     .positive("review-time-budget must be positive")
     .max(120, "review-time-budget cannot exceed 120 minutes")
     .optional(),
-  azureToken: z
-    .string()
-    .trim()
-    .min(1, "azure-token cannot be empty")
-    .optional(),
+  azureToken: z.string().trim().min(1, "azure-token cannot be empty").optional(),
 });
 
 function parseArgs(): CliOptions {
@@ -277,16 +262,13 @@ function parseArgs(): CliOptions {
     })
     .option("organization", {
       type: "string",
-      description:
-        "Azure DevOps organization URL (https://dev.azure.com/contoso).",
-      default:
-        process.env.AZURE_DEVOPS_ORG_URL ?? process.env.SYSTEM_COLLECTIONURI,
+      description: "Azure DevOps organization URL (https://dev.azure.com/contoso).",
+      default: process.env.AZURE_DEVOPS_ORG_URL ?? process.env.SYSTEM_COLLECTIONURI,
     })
     .option("project", {
       type: "string",
       description: "Azure DevOps project name.",
-      default:
-        process.env.AZURE_DEVOPS_PROJECT ?? process.env.SYSTEM_TEAMPROJECT,
+      default: process.env.AZURE_DEVOPS_PROJECT ?? process.env.SYSTEM_TEAMPROJECT,
     })
     .option("repository", {
       type: "string",
@@ -390,9 +372,7 @@ async function runCommand(
       return err.stdout ?? "";
     }
     logger.error("Command failed:", stderr.trim());
-    throw new ReviewError(
-      `Command ${command.join(" ")} failed: ${stderr.trim() || err.message}`,
-    );
+    throw new ReviewError(`Command ${command.join(" ")} failed: ${stderr.trim() || err.message}`);
   }
 }
 
@@ -422,10 +402,7 @@ async function loadDiff(options: CliOptions): Promise<string> {
       }
     } catch (error) {
       const message = (error as Error).message;
-      logger.warn(
-        "Failed to resolve target branch from Azure DevOps: %s",
-        message,
-      );
+      logger.warn("Failed to resolve target branch from Azure DevOps: %s", message);
       errors.push(message);
     }
   }
@@ -441,9 +418,7 @@ async function loadDiff(options: CliOptions): Promise<string> {
   }
 
   if (errors.length > 0) {
-    throw new ReviewError(
-      `Failed to load pull-request diff: ${errors.join("; ")}`,
-    );
+    throw new ReviewError(`Failed to load pull-request diff: ${errors.join("; ")}`);
   }
 
   throw new ReviewError(
@@ -463,12 +438,7 @@ async function gitDiff(options: CliOptions): Promise<string> {
   });
   const sourceRef = options.sourceRef ?? "HEAD";
   logger.info("Computing git diff", `${fetchRef}...${sourceRef}`);
-  const diff = await runCommand([
-    "git",
-    "diff",
-    "--unified=3",
-    `${fetchRef}...${sourceRef}`,
-  ]);
+  const diff = await runCommand(["git", "diff", "--unified=3", `${fetchRef}...${sourceRef}`]);
   if (!diff.trim()) {
     logger.warn("git diff returned no changes.");
   }
@@ -493,9 +463,7 @@ function parseUnifiedDiff(diffText: string): FileDiff[] {
       const parts = line.split(" ");
       if (parts.length >= 4) {
         const pathToken = parts[2];
-        currentPath = pathToken.startsWith("a/")
-          ? pathToken.slice(2)
-          : pathToken;
+        currentPath = pathToken.startsWith("a/") ? pathToken.slice(2) : pathToken;
       } else {
         currentPath = "unknown";
       }
@@ -518,11 +486,7 @@ function parseUnifiedDiff(diffText: string): FileDiff[] {
   return files;
 }
 
-function truncateFiles(
-  files: FileDiff[],
-  maxFiles: number,
-  maxChars: number,
-): FileDiff[] {
+function truncateFiles(files: FileDiff[], maxFiles: number, maxChars: number): FileDiff[] {
   const trimmed = files.slice(0, maxFiles);
   const totalChars = trimmed.reduce((acc, file) => acc + file.diff.length, 0);
   if (totalChars <= maxChars) {
@@ -546,40 +510,28 @@ function truncateFiles(
   }
 
   if (result.length === 0) {
-    throw new ReviewError(
-      "Diff too large to include in prompt. Increase max-diff-chars.",
-    );
+    throw new ReviewError("Diff too large to include in prompt. Increase max-diff-chars.");
   }
 
   return result;
 }
 
 function buildPrompt(files: FileDiff[]): string {
-  const sections = files.map(
-    (file) => `File: ${file.path}\n\`\`\`\n${file.diff}\n\`\`\``,
-  );
+  const sections = files.map((file) => `File: ${file.path}\n\`\`\`\n${file.diff}\n\`\`\``);
   return sections.join("\n\n");
 }
 
-async function resolvePullRequestTargetBranch(
-  options: CliOptions,
-): Promise<string | undefined> {
+async function resolvePullRequestTargetBranch(options: CliOptions): Promise<string | undefined> {
   if (!options.prId) {
     return undefined;
   }
 
   if (!options.azureToken) {
-    throw new ReviewError(
-      "Azure DevOps PAT is required to resolve pull request target branch.",
-    );
+    throw new ReviewError("Azure DevOps PAT is required to resolve pull request target branch.");
   }
 
   const { gitApi, repositoryId } = await ensureGitClient(options);
-  const pr = await gitApi.getPullRequest(
-    repositoryId,
-    options.prId,
-    options.project,
-  );
+  const pr = await gitApi.getPullRequest(repositoryId, options.prId, options.project);
 
   return pr?.targetRefName ?? undefined;
 }
@@ -603,10 +555,7 @@ async function callCodex(
     },
   ];
 
-  if (
-    typeof options.timeBudgetMinutes === "number" &&
-    options.timeBudgetMinutes > 0
-  ) {
+  if (typeof options.timeBudgetMinutes === "number" && options.timeBudgetMinutes > 0) {
     instructions.push({
       type: "text",
       text: `Work efficiently and limit your analysis to what you can cover in at most ${options.timeBudgetMinutes} minutes; prioritize the most important issues first.`,
@@ -823,15 +772,9 @@ async function postOverallComment(
   gitApi?: IGitApi,
   repositoryId?: string,
 ): Promise<void> {
-  const contentLines: string[] = [
-    review.summary || "Automated review completed.",
-  ];
+  const contentLines: string[] = [review.summary || "Automated review completed."];
   if (review.findings.length > 0) {
-    contentLines.push(
-      "",
-      "### Findings",
-      ...buildFindingsSummary(review.findings),
-    );
+    contentLines.push("", "### Findings", ...buildFindingsSummary(review.findings));
   }
   const commentText = contentLines.join("\n").trim();
 
@@ -840,9 +783,7 @@ async function postOverallComment(
     return;
   }
   if (!gitApi || !repositoryId) {
-    logger.warn(
-      "Git API unavailable; cannot post overall comment. Enable PAT and PR context.",
-    );
+    logger.warn("Git API unavailable; cannot post overall comment. Enable PAT and PR context.");
     return;
   }
 
@@ -933,35 +874,24 @@ async function createThread(
   thread: GitInterfaces.GitPullRequestCommentThread,
 ): Promise<void> {
   if (!options.project) {
-    throw new ReviewError(
-      "Azure DevOps project name is required to post comments.",
-    );
+    throw new ReviewError("Azure DevOps project name is required to post comments.");
   }
   if (!options.prId) {
     throw new ReviewError("Pull request ID is required to post comments.");
   }
 
   logger.info("Posting review thread to PR", options.prId);
-  await gitApi.createThread(
-    thread,
-    repositoryId,
-    options.prId,
-    options.project,
-  );
+  await gitApi.createThread(thread, repositoryId, options.prId, options.project);
 }
 
 async function ensureGitClient(
   options: CliOptions,
 ): Promise<{ gitApi: IGitApi; repositoryId: string }> {
   if (!options.organization) {
-    throw new ReviewError(
-      "Azure DevOps organization URL is required. Pass --organization.",
-    );
+    throw new ReviewError("Azure DevOps organization URL is required. Pass --organization.");
   }
   if (!options.project) {
-    throw new ReviewError(
-      "Azure DevOps project name is required. Pass --project.",
-    );
+    throw new ReviewError("Azure DevOps project name is required. Pass --project.");
   }
   const token = options.azureToken;
   if (!token) {
@@ -982,23 +912,16 @@ async function ensureGitClient(
   return { gitApi, repositoryId };
 }
 
-async function resolveRepositoryId(
-  options: CliOptions,
-  gitApi: IGitApi,
-): Promise<string> {
+async function resolveRepositoryId(options: CliOptions, gitApi: IGitApi): Promise<string> {
   if (options.repositoryId) {
     return options.repositoryId;
   }
   if (!options.repository) {
-    throw new ReviewError(
-      "Repository name or ID is required to post comments.",
-    );
+    throw new ReviewError("Repository name or ID is required to post comments.");
   }
   const repo = await gitApi.getRepository(options.repository, options.project);
   if (!repo?.id) {
-    throw new ReviewError(
-      `Could not resolve repository ID for ${options.repository}`,
-    );
+    throw new ReviewError(`Could not resolve repository ID for ${options.repository}`);
   }
   return repo.id;
 }
@@ -1012,11 +935,7 @@ async function main(): Promise<void> {
   try {
     const diffText = await loadDiff(options);
     const fileDiffs = parseUnifiedDiff(diffText);
-    const truncated = truncateFiles(
-      fileDiffs,
-      options.maxFiles,
-      options.maxDiffChars,
-    );
+    const truncated = truncateFiles(fileDiffs, options.maxFiles, options.maxDiffChars);
     const prompt = buildPrompt(truncated);
     let rawJson: string;
     if (options.codexResponseFile) {
@@ -1045,12 +964,9 @@ async function main(): Promise<void> {
     await postOverallComment(options, review, gitApi, repositoryId);
     await postSuggestions(options, review, gitApi, repositoryId);
     const elapsedMs = Date.now() - startTime;
-    logger.info(
-      `Review completed successfully in ${formatElapsed(elapsedMs)}.`,
-    );
+    logger.info(`Review completed successfully in ${formatElapsed(elapsedMs)}.`);
   } catch (error) {
-    const message =
-      error instanceof ReviewError ? error.message : (error as Error).message;
+    const message = error instanceof ReviewError ? error.message : (error as Error).message;
     logger.error("Review failed:", message);
     process.exitCode = 1;
   }

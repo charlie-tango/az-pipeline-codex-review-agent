@@ -42,6 +42,9 @@ extends:
     reviewTimeBudget: '20'
     packageVersion: 'latest'
     dryRun: false
+
+# grant the System.AccessToken to scripts for Azure DevOps REST access
+# in the pipeline UI: Settings → "Allow scripts to access the OAuth token"
 ```
 
 Secrets `OPENAI_API_KEY` and `AZURE_DEVOPS_PAT` must be defined in the pipeline. Set `dryRun: true` if you want logs only without posting review comments.

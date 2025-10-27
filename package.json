@@ -11,11 +11,13 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build && husky",
-    "lint": "biome lint",
-    "lint:fix": "biome lint --write",
-    "review": "tsx src/reviewPr.ts",
-    "review:local": "tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug"
+    "dev": "pnpm exec tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug",
+    "lint": "pnpm exec biome check .",
+    "prepublishOnly": "pnpm run build",
+    "release": "pnpm run lint && pnpm run typecheck && bumpp && pnpm publish --access public",
+    "test": "echo 'No tests defined'",
+    "typecheck": "tsc --noEmit",
+    "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.50.0",
@@ -24,16 +26,21 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.7.0",
     "@types/node": "^20.12.7",
     "@types/yargs": "^17.0.32",
-    "@biomejs/biome": "^1.7.0",
-    "husky": "^9.0.11",
+    "bumpp": "^9.2.0",
     "lint-staged": "^15.2.7",
+    "simple-git-hooks": "^2.13.1",
     "tsx": "^4.19.1",
     "typescript": "^5.4.4"
   },
   "lint-staged": {
     "*": "pnpm exec biome lint --staged --write --no-errors-on-unmatched"
   },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged"
+  },
+  "files": ["dist"],
   "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d"
 }

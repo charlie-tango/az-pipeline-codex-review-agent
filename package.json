@@ -1,24 +1,25 @@
 {
-  "name": "@charlietango/az-pipeline-review-agent",
+  "name": "@charlietango/az-pipeline-codex-review-agent",
   "version": "0.2.0",
-  "description": "script for reviewing pull requests using OpenAI's models and publishing feedback to Azure DevOps",
+  "description": "Codex-based pull request review agent that posts feedback to Azure DevOps",
   "license": "MIT",
+  "type": "module",
   "main": "dist/reviewPr.js",
   "types": "dist/reviewPr.d.ts",
   "bin": {
-    "az-agent-pr-review": "dist/reviewPr.js"
+    "codex-azure-review": "dist/reviewPr.js"
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build && husky install",
+    "prepare": "npm run build && husky",
     "lint": "biome lint",
     "lint:fix": "biome lint --write",
-    "review": "ts-node src/reviewPr.ts",
-    "review:local": "ts-node src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug"
+    "review": "tsx src/reviewPr.ts",
+    "review:local": "tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug"
   },
   "dependencies": {
+    "@openai/codex-sdk": "^0.50.0",
     "azure-devops-node-api": "^15.1.1",
-    "openai": "^4.24.1",
     "yargs": "^17.7.2",
     "zod": "^4.0.0"
   },
@@ -28,7 +29,7 @@
     "@biomejs/biome": "^1.7.0",
     "husky": "^9.0.11",
     "lint-staged": "^15.2.7",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.19.1",
     "typescript": "^5.4.4"
   },
   "lint-staged": {

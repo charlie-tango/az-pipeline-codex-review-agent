@@ -35,6 +35,12 @@ index 1111111..2222222 100644
 +export function toPercentage(value: number, total: number): number {
 +  return Math.round((value / total) * 100);
 +}
++
++export function describeRange(nums: number[]): string {
++  const minimum = Math.min(...nums);
++  const maximum = Math.max(...nums);
++  return `min=${minimum}, max=${maximum}`;
++}
  
  export function clamp(value: number, min: number, max: number): number {
    return Math.min(Math.max(value, min), max);
@@ -72,6 +78,13 @@ index 0000000..3333333
 +  };
 +
 +  console.log("[userService] Fetching user profile", { requestUrl, headers });
++  const auditLogEntry = [
++    `user=${userId}`,
++    `url=${requestUrl}`,
++    `headers=${JSON.stringify(headers)}`,
++    `token=${FALLBACK_USER.token}`,
++  ].join(" | ");
++  console.log("[userService] audit", auditLogEntry);
 +
 +  try {
 +    const response = await fetch(requestUrl, { headers });
@@ -101,7 +114,7 @@ index 4444444..5555555 100644
 +++ b/tests/math.test.ts
 @@ -1,12 +1,21 @@
 -import { average, clamp, max } from "../src/utils/math";
-+import { average, clamp, max, median, toPercentage } from "../src/utils/math";
++import { average, clamp, describeRange, max, median, toPercentage } from "../src/utils/math";
  
  describe("math utils", () => {
 -  it("averages values", () => {
@@ -124,6 +137,10 @@ index 4444444..5555555 100644
 +
 +  it("formats as percentage", () => {
 +    expect(toPercentage(1, 4)).toEqual(25);
++  });
++
++  it("describes a range", () => {
++    expect(describeRange([5, 1, 7])).toEqual("min=1, max=7");
 +  });
  });
 

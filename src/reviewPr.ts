@@ -1,20 +1,20 @@
+#!/usr/bin/env node
+
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import * as azdev from "azure-devops-node-api";
-import type { IGitApi } from "azure-devops-node-api/GitApi";
-import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces";
-import { OpenAI } from "openai";
+import azdev from "azure-devops-node-api";
+import type { IGitApi } from "azure-devops-node-api/GitApi.js";
+import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
+import { Codex } from "@openai/codex-sdk";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
-
-const DEFAULT_MODEL = "gpt-5.0-codex";
 
 interface FileDiff {
   path: string;
@@ -27,15 +27,67 @@ interface ReviewSuggestion {
   endLine: number;
   comment: string;
   replacement: string;
+  originFinding?: {
+    severity?: string;
+    title?: string;
+    details?: string;
+  };
+}
+
+interface Finding {
+  severity?: string;
+  file?: string;
+  line?: number;
+  title?: string;
+  details?: string;
+  suggestion?: {
+    file?: string;
+    start_line: number;
+    end_line?: number;
+    comment: string;
+    replacement: string;
+  } | null;
+  [key: string]: unknown;
 }
 
 interface ReviewResult {
   summary: string;
-  findings: Array<Record<string, unknown>>;
+  findings: Finding[];
   suggestions: ReviewSuggestion[];
 }
 
 const integerFromString = z.coerce.number().int();
+
+const SuggestionDetailsSchema = z.object({
+  file: z.string(),
+  start_line: integerFromString,
+  end_line: integerFromString.optional(),
+  comment: z.string(),
+  replacement: z.string(),
+});
+
+const SuggestionInstructionSchema = z.object({
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  comment: z.string(),
+  replacement: z.string(),
+});
+
+const FindingInstructionSchema = z.object({
+  severity: z.string(),
+  file: z.string(),
+  line: z.number().int(),
+  title: z.string(),
+  details: z.string(),
+  suggestion: SuggestionInstructionSchema.nullable(),
+});
+
+const CodexInstructionSchema = z.object({
+  summary: z.string(),
+  findings: z.array(FindingInstructionSchema),
+  suggestions: z.array(SuggestionInstructionSchema),
+});
 
 const FindingSchema = z
   .object({
@@ -44,6 +96,10 @@ const FindingSchema = z
     line: integerFromString.optional(),
     title: z.string().optional(),
     details: z.string().optional(),
+    suggestion: z
+      .union([SuggestionDetailsSchema, z.null()])
+      .optional()
+      .default(null),
   })
   .passthrough();
 
@@ -61,26 +117,47 @@ const ReviewSchema = z.object({
   suggestions: z.array(SuggestionSchema).optional().default([]),
 });
 
-interface CliOptions {
-  prId?: number;
-  organization?: string;
-  project?: string;
-  repository?: string;
-  repositoryId?: string;
-  targetBranch?: string;
-  sourceRef?: string;
-  diffFile?: string;
-  maxFiles: number;
-  maxDiffChars: number;
-  openaiApiKey?: string;
-  openaiModel: string;
-  maxOutputTokens: number;
-  temperature?: number;
-  dryRun: boolean;
-  debug: boolean;
-  outputJson?: string;
-  azureToken?: string;
+const CODEX_OUTPUT_SCHEMA = normalizeJsonSchema(
+  z.toJSONSchema(CodexInstructionSchema, {
+    target: "openapi-3.0",
+  }) as Record<string, unknown>,
+);
+
+function normalizeJsonSchema<T>(input: T): T {
+  if (Array.isArray(input)) {
+    return input.map((item) => normalizeJsonSchema(item)) as unknown as T;
+  }
+
+  if (input && typeof input === "object") {
+    const record = input as Record<string, unknown>;
+
+    for (const key of Object.keys(record)) {
+      if (key === "additionalProperties") {
+        const value = record[key];
+        if (value === false) {
+          record[key] = {
+            type: "object",
+            additionalProperties: false,
+          };
+          record[key] = normalizeJsonSchema({
+            type: "object",
+            additionalProperties: false,
+          });
+        } else {
+          record[key] = normalizeJsonSchema(value);
+        }
+      } else {
+        record[key] = normalizeJsonSchema(record[key]);
+      }
+    }
+
+    return record as unknown as T;
+  }
+
+  return input;
 }
+
+type CliOptions = z.infer<typeof ArgsSchema>;
 
 class ReviewError extends Error {
   constructor(message: string) {
@@ -125,6 +202,55 @@ function envInt(name: string): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
+
+const ArgsSchema = z.object({
+  prId: z.coerce
+    .number()
+    .int("pr-id must be an integer")
+    .positive("pr-id must be positive")
+    .optional(),
+  organization: z
+    .string()
+    .trim()
+    .min(1, "organization cannot be empty")
+    .optional(),
+  project: z.string().trim().min(1, "project cannot be empty").optional(),
+  repository: z.string().trim().min(1, "repository cannot be empty").optional(),
+  repositoryId: z
+    .string()
+    .trim()
+    .uuid("repository-id must be a valid UUID")
+    .optional(),
+  targetBranch: z.string().trim().optional(),
+  sourceRef: z.string().trim().optional(),
+  diffFile: z.string().trim().optional(),
+  maxFiles: z.coerce
+    .number()
+    .int("max-files must be an integer")
+    .positive("max-files must be positive")
+    .max(100, "max-files cannot exceed 100")
+    .default(20),
+  maxDiffChars: z.coerce
+    .number()
+    .int("max-diff-chars must be an integer")
+    .positive("max-diff-chars must be positive")
+    .default(16000),
+  dryRun: z.coerce.boolean().default(false),
+  debug: z.coerce.boolean().default(false),
+  outputJson: z.string().trim().optional(),
+  codexResponseFile: z.string().trim().optional(),
+  reviewTimeBudget: z.coerce
+    .number()
+    .int("review-time-budget must be an integer")
+    .positive("review-time-budget must be positive")
+    .max(120, "review-time-budget cannot exceed 120 minutes")
+    .optional(),
+  azureToken: z
+    .string()
+    .trim()
+    .min(1, "azure-token cannot be empty")
+    .optional(),
+});
 
 function parseArgs(): CliOptions {
   const argv = yargs(hideBin(process.argv))
@@ -180,25 +306,6 @@ function parseArgs(): CliOptions {
       description: "Maximum total diff characters to include in the prompt.",
       default: 16000,
     })
-    .option("openai-api-key", {
-      type: "string",
-      description: "OpenAI API key.",
-      default: process.env.OPENAI_API_KEY,
-    })
-    .option("openai-model", {
-      type: "string",
-      description: "OpenAI model identifier.",
-      default: process.env.OPENAI_REVIEW_MODEL ?? DEFAULT_MODEL,
-    })
-    .option("max-output-tokens", {
-      type: "number",
-      description: "Maximum tokens for the Codex response.",
-      default: 1024,
-    })
-    .option("temperature", {
-      type: "number",
-      description: "Sampling temperature (omit to use the model default).",
-    })
     .option("dry-run", {
       type: "boolean",
       description: "Skip posting comments; log output only.",
@@ -213,6 +320,16 @@ function parseArgs(): CliOptions {
       type: "string",
       description: "Write the raw Codex response JSON to this path.",
     })
+    .option("codex-response-file", {
+      type: "string",
+      description:
+        "Path to a Codex JSON response to reuse instead of calling the agent (for local testing).",
+    })
+    .option("review-time-budget", {
+      type: "number",
+      description:
+        "Optional time budget (in minutes) to remind Codex to stay within. Omit for no reminder.",
+    })
     .option("azure-token", {
       type: "string",
       description:
@@ -222,26 +339,16 @@ function parseArgs(): CliOptions {
     .help()
     .parseSync();
 
-  return {
-    prId: argv.prId as number | undefined,
-    organization: argv.organization as string | undefined,
-    project: argv.project as string | undefined,
-    repository: argv.repository as string | undefined,
-    repositoryId: argv.repositoryId as string | undefined,
-    targetBranch: argv.targetBranch as string | undefined,
-    sourceRef: argv.sourceRef as string | undefined,
-    diffFile: argv.diffFile as string | undefined,
-    maxFiles: argv.maxFiles as number,
-    maxDiffChars: argv.maxDiffChars as number,
-    openaiApiKey: argv.openaiApiKey as string | undefined,
-    openaiModel: argv.openaiModel as string,
-    maxOutputTokens: argv.maxOutputTokens as number,
-    temperature: argv.temperature as number | undefined,
-    dryRun: Boolean(argv.dryRun),
-    debug: Boolean(argv.debug),
-    outputJson: argv.outputJson as string | undefined,
-    azureToken: argv.azureToken as string | undefined,
-  };
+  const parsed = ArgsSchema.safeParse(argv);
+
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
+    throw new ReviewError(`Invalid CLI arguments: ${message}`);
+  }
+
+  return parsed.data;
 }
 
 async function runCommand(
@@ -283,16 +390,40 @@ async function loadDiff(options: CliOptions): Promise<string> {
     return readFileSync(diffPath, "utf8");
   }
 
+  const errors: string[] = [];
+
+  if (options.prId) {
+    try {
+      logger.info("Fetching diff for PR #%s from Azure DevOps", options.prId);
+      return await azureDiff(options);
+    } catch (error) {
+      const message = (error as Error).message;
+      logger.warn(
+        "Azure DevOps PR diff failed (%s); will attempt git diff if possible",
+        message,
+      );
+      errors.push(message);
+    }
+  }
+
   if (options.targetBranch) {
     try {
       return await gitDiff(options);
     } catch (error) {
-      logger.warn("git diff failed:", (error as Error).message);
+      const message = (error as Error).message;
+      logger.warn("git diff failed: %s", message);
+      errors.push(message);
     }
   }
 
+  if (errors.length > 0) {
+    throw new ReviewError(
+      `Failed to load pull-request diff: ${errors.join("; ")}`,
+    );
+  }
+
   throw new ReviewError(
-    "No diff source available. Provide --diff-file or --target-branch.",
+    "No diff source available. Provide --diff-file, --pr-id, or --target-branch.",
   );
 }
 
@@ -406,96 +537,80 @@ function buildPrompt(files: FileDiff[]): string {
   return sections.join("\n\n");
 }
 
-async function callOpenAI(
-  options: CliOptions,
-  prompt: string,
-): Promise<string> {
-  if (!options.openaiApiKey) {
-    throw new ReviewError("OPENAI_API_KEY not provided.");
+async function azureDiff(options: CliOptions): Promise<string> {
+  if (!options.prId) {
+    throw new ReviewError("PR ID is required to fetch diff from Azure DevOps.");
   }
 
-  const client = new OpenAI({ apiKey: options.openaiApiKey });
-  const systemPrompt = [
-    "You are an autonomous code-review assistant focused on actionable feedback.",
-    "Analyze the provided unified diff for a pull request and respond in JSON using this structure:",
-    "{",
-    '  "summary": "Overall summary of the changes and review perspective.",',
-    '  "findings": [',
-    "    {",
-    '      "severity": "critical|major|minor|nit",',
-    '      "file": "path/to/file",',
-    '      "line": 123,',
-    '      "title": "Short issue label",',
-    '      "details": "Detailed explanation and guidance."',
-    "    }",
-    "  ],",
-    '  "suggestions": [',
-    "    {",
-    '      "file": "path/to/file",',
-    '      "start_line": 10,',
-    '      "end_line": 12,',
-    '      "comment": "Comment that will precede a suggestion.",',
-    '      "replacement": "Replacement code to place inside ```suggestion``` block."',
-    "    }",
-    "  ]",
-    "}",
-    "Only respond with valid JSON.",
-  ].join("\n");
-
-  logger.info("Requesting review from OpenAI model", options.openaiModel);
-  const requestBody: Parameters<typeof client.responses.create>[0] = {
-    model: options.openaiModel,
-    input: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: prompt },
-    ],
-    max_output_tokens: options.maxOutputTokens,
-  };
-  if (options.temperature !== undefined) {
-    requestBody.temperature = options.temperature;
-    logger.debug("Using temperature override:", options.temperature);
+  const command = ["az", "repos", "pr", "diff", "--id", String(options.prId)];
+  if (options.project) {
+    command.push("--project", options.project);
+  }
+  if (options.repository) {
+    command.push("--repository", options.repository);
+  }
+  if (options.organization) {
+    command.push("--organization", options.organization);
   }
 
-  const response = await client.responses.create(requestBody);
-
-  const rawOutput = extractOutputText(response);
-  logger.debug("Raw model output:", rawOutput);
-  return rawOutput;
+  logger.info("Fetching diff from Azure DevOps for PR #%s", options.prId);
+  return await runCommand(command);
 }
 
-function extractOutputText(response: unknown): string {
-  const payload = response as Record<string, unknown>;
+async function callCodex(
+  prompt: string,
+  options: { timeBudgetMinutes?: number } = {},
+): Promise<string> {
+  const codex = new Codex();
+  const threadOptions: Parameters<Codex["startThread"]>[0] = {
+    workingDirectory: process.cwd(),
+    skipGitRepoCheck: true,
+  };
+  const thread = codex.startThread(threadOptions);
+
+  logger.info("Requesting review from Codex agent");
+  const instructions = [
+    {
+      type: "text" as const,
+      text: "You are an autonomous code-review assistant focused on actionable feedback.",
+    },
+  ];
+
   if (
-    typeof payload.output_text === "string" &&
-    payload.output_text.trim().length > 0
+    typeof options.timeBudgetMinutes === "number" &&
+    options.timeBudgetMinutes > 0
   ) {
-    return payload.output_text;
+    instructions.push({
+      type: "text",
+      text: `Work efficiently and limit your analysis to what you can cover in at most ${options.timeBudgetMinutes} minutes; prioritize the most important issues first.`,
+    });
   }
 
-  const output = payload.output;
-  if (Array.isArray(output)) {
-    const chunks = [];
-    for (const item of output) {
-      if (item && typeof item === "object" && "content" in item) {
-        const content = (item as Record<string, unknown>).content;
-        if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block && typeof block === "object" && "text" in block) {
-              const text = (block as Record<string, unknown>).text;
-              if (typeof text === "string") {
-                chunks.push(text);
-              }
-            }
-          }
-        }
-      }
-    }
-    if (chunks.length > 0) {
-      return chunks.join("");
-    }
+  instructions.push(
+    {
+      type: "text",
+      text: "Analyze the provided unified diff for a pull request and respond in JSON that conforms to the supplied schema.",
+    },
+    {
+      type: "text",
+      text: prompt,
+    },
+  );
+
+  const turn = await thread.run(instructions, {
+    outputSchema: CODEX_OUTPUT_SCHEMA,
+  });
+
+  const rawOutput =
+    typeof turn.finalResponse === "string"
+      ? turn.finalResponse
+      : JSON.stringify(turn.finalResponse ?? {});
+  if (!rawOutput.trim()) {
+    throw new ReviewError("Codex response was empty.");
   }
 
-  throw new ReviewError("Could not extract text from OpenAI response.");
+  logger.debug("Raw model output:", rawOutput);
+  return rawOutput;
 }
 
 function parseReview(rawJson: string): ReviewResult {
@@ -523,18 +638,85 @@ function parseReview(rawJson: string): ReviewResult {
   }
 
   const summary = parsed.summary.trim();
-  const findings = parsed.findings.map(
-    (finding) => ({ ...finding }) as Record<string, unknown>,
-  );
-  const suggestions: ReviewSuggestion[] = parsed.suggestions.map(
-    (suggestion) => ({
-      file: suggestion.file,
-      startLine: suggestion.start_line,
-      endLine: suggestion.end_line ?? suggestion.start_line,
-      comment: suggestion.comment.trim(),
-      replacement: suggestion.replacement.replace(/\s+$/, ""),
-    }),
-  );
+
+  const suggestions: ReviewSuggestion[] = [];
+  const seenSuggestions = new Set<string>();
+
+  const pushSuggestion = (
+    source: {
+      file?: string;
+      start_line: number;
+      end_line?: number;
+      comment: string;
+      replacement: string;
+    },
+    context?: {
+      file?: string;
+      line?: number;
+      severity?: string;
+      title?: string;
+      details?: string;
+    },
+  ) => {
+    const file = source.file ?? context?.file;
+    const startLine = source.start_line ?? context?.line;
+    if (!file || startLine === undefined || startLine === null) {
+      return;
+    }
+    const endLine = source.end_line ?? context?.line ?? startLine;
+    const key = `${file}:${startLine}:${endLine}:${source.comment}:${source.replacement}`;
+    if (seenSuggestions.has(key)) {
+      return;
+    }
+    seenSuggestions.add(key);
+    suggestions.push({
+      file,
+      startLine,
+      endLine,
+      comment: source.comment.trim(),
+      replacement: source.replacement.replace(/\s+$/, ""),
+      originFinding: context
+        ? {
+            severity: context.severity,
+            title: context.title,
+            details: context.details,
+          }
+        : undefined,
+    });
+  };
+
+  for (const suggestion of parsed.suggestions) {
+    pushSuggestion(suggestion);
+  }
+
+  const findings: Finding[] = parsed.findings.map((finding) => {
+    const normalized: Finding = {
+      severity: finding.severity,
+      file: finding.file,
+      line: finding.line,
+      title: finding.title,
+      details: finding.details,
+      suggestion: finding.suggestion,
+    };
+
+    for (const [key, value] of Object.entries(finding)) {
+      if (!(key in normalized)) {
+        (normalized as Record<string, unknown>)[key] = value;
+      }
+    }
+
+    if (finding.suggestion && finding.suggestion !== null) {
+      pushSuggestion(finding.suggestion, {
+        file: finding.suggestion.file ?? finding.file,
+        line: finding.suggestion.start_line ?? finding.line,
+        severity: finding.severity,
+        title: finding.title,
+        details: finding.details,
+      });
+    }
+
+    return normalized;
+  });
 
   return { summary, findings, suggestions };
 }
@@ -548,19 +730,32 @@ function formatZodError(error: z.ZodError): string {
     .join("; ");
 }
 
-function buildFindingsSummary(
-  findings: Array<Record<string, unknown>>,
-): string[] {
+function buildFindingsSummary(findings: Finding[]): string[] {
   const lines: string[] = [];
   for (const finding of findings) {
-    const severity = String(finding.severity ?? "info").toUpperCase();
-    const filePath = String(finding.file ?? "unknown");
-    const line = finding.line !== undefined ? String(finding.line) : "?";
-    const title = finding.title ? String(finding.title) : "";
-    const details = finding.details ? String(finding.details) : "";
-    lines.push(
-      `- **${severity}** ${filePath}:${line} – ${title}\n  ${details}`,
-    );
+    const severity = (finding.severity ?? "info").toUpperCase();
+    const filePath = finding.file ?? finding.suggestion?.file ?? "unknown";
+    const lineNumber = finding.line ?? finding.suggestion?.start_line ?? "?";
+    const title = finding.title ?? "";
+    const details = finding.details ?? "";
+    const headerParts = [
+      `- **${severity}** ${filePath}:${lineNumber}`,
+      title ? `– ${title}` : "",
+    ].filter(Boolean);
+    const detailLines = [details]
+      .filter((value) => value && value.trim().length > 0)
+      .map((value) => `  ${value}`);
+    if (finding.suggestion && finding.suggestion !== null) {
+      detailLines.push(
+        `  Suggested fix for lines ${finding.suggestion.start_line}${
+          finding.suggestion.end_line &&
+          finding.suggestion.end_line !== finding.suggestion.start_line
+            ? `-${finding.suggestion.end_line}`
+            : ""
+        }.`,
+      );
+    }
+    lines.push([headerParts.join(" "), ...detailLines].join("\n"));
   }
   return lines;
 }
@@ -570,14 +765,26 @@ function logReview(review: ReviewResult): void {
   if (review.findings.length > 0) {
     logger.info("Findings:");
     for (const entry of review.findings) {
-      logger.info("-", JSON.stringify(entry));
+      logger.info(
+        "-",
+        JSON.stringify({
+          severity: entry.severity,
+          file: entry.file,
+          line: entry.line,
+          title: entry.title,
+          hasSuggestion: entry.suggestion != null,
+        }),
+      );
     }
   }
   if (review.suggestions.length > 0) {
     logger.info("Suggestions:");
     for (const suggestion of review.suggestions) {
+      const contextLabel = suggestion.originFinding?.severity
+        ? ` (${suggestion.originFinding.severity})`
+        : "";
       logger.info(
-        `- ${suggestion.file}:${suggestion.startLine}-${suggestion.endLine} -> ${suggestion.comment.replace(/\s+/g, " ").slice(0, 80)}`,
+        `- ${suggestion.file}:${suggestion.startLine}-${suggestion.endLine}${contextLabel} -> ${suggestion.comment.replace(/\s+/g, " ").slice(0, 80)}`,
       );
     }
   }
@@ -637,7 +844,29 @@ async function postSuggestions(
   }
 
   for (const suggestion of review.suggestions) {
-    const suggestionBlock = `${suggestion.comment}\n\n\`\`\`suggestion\n${suggestion.replacement}\n\`\`\``;
+    const contextLines: string[] = [];
+    if (suggestion.originFinding) {
+      const severity = suggestion.originFinding.severity;
+      const title = suggestion.originFinding.title;
+      const details = suggestion.originFinding.details;
+      const headerParts = [];
+      if (severity) {
+        headerParts.push(`**${severity.toUpperCase()}**`);
+      }
+      if (title) {
+        headerParts.push(title);
+      }
+      if (headerParts.length > 0) {
+        contextLines.push(headerParts.join(" "));
+      }
+      if (details) {
+        contextLines.push(details);
+      }
+    }
+    contextLines.push(suggestion.comment);
+    const suggestionBlock = `${contextLines
+      .filter((line) => line && line.trim().length > 0)
+      .join("\n\n")}\n\n\`\`\`suggestion\n${suggestion.replacement}\n\`\`\``;
 
     if (options.dryRun) {
       logger.info(
@@ -760,7 +989,16 @@ async function main(): Promise<void> {
       options.maxDiffChars,
     );
     const prompt = buildPrompt(truncated);
-    const rawJson = await callOpenAI(options, prompt);
+    let rawJson: string;
+    if (options.codexResponseFile) {
+      const responsePath = path.resolve(options.codexResponseFile);
+      logger.info("Using Codex response fixture from", responsePath);
+      rawJson = readFileSync(responsePath, "utf8");
+    } else {
+      rawJson = await callCodex(prompt, {
+        timeBudgetMinutes: options.reviewTimeBudget,
+      });
+    }
 
     if (options.outputJson) {
       writeFileSync(path.resolve(options.outputJson), rawJson, "utf8");

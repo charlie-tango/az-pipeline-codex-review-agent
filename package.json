@@ -6,11 +6,13 @@
   "main": "dist/reviewPr.js",
   "types": "dist/reviewPr.d.ts",
   "bin": {
-    "codex-azure-review": "dist/reviewPr.js"
+    "az-agent-pr-review": "dist/reviewPr.js"
   },
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
+    "lint": "biome lint",
+    "lint:fix": "biome lint --write",
     "review": "ts-node src/reviewPr.ts",
     "review:local": "ts-node src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug"
   },
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^20.12.7",
     "@types/yargs": "^17.0.32",
+    "@biomejs/biome": "^1.7.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.4"
   },

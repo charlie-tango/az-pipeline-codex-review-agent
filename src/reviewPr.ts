@@ -75,6 +75,7 @@ interface CliOptions {
   openaiApiKey?: string;
   openaiModel: string;
   maxOutputTokens: number;
+  temperature?: number;
   dryRun: boolean;
   debug: boolean;
   outputJson?: string;
@@ -194,6 +195,10 @@ function parseArgs(): CliOptions {
       description: "Maximum tokens for the Codex response.",
       default: 1024,
     })
+    .option("temperature", {
+      type: "number",
+      description: "Sampling temperature (omit to use the model default).",
+    })
     .option("dry-run", {
       type: "boolean",
       description: "Skip posting comments; log output only.",
@@ -231,6 +236,7 @@ function parseArgs(): CliOptions {
     openaiApiKey: argv.openaiApiKey as string | undefined,
     openaiModel: argv.openaiModel as string,
     maxOutputTokens: argv.maxOutputTokens as number,
+    temperature: argv.temperature as number | undefined,
     dryRun: Boolean(argv.dryRun),
     debug: Boolean(argv.debug),
     outputJson: argv.outputJson as string | undefined,
@@ -437,15 +443,20 @@ async function callOpenAI(
   ].join("\n");
 
   logger.info("Requesting review from OpenAI model", options.openaiModel);
-  const response = await client.responses.create({
+  const requestBody: Parameters<typeof client.responses.create>[0] = {
     model: options.openaiModel,
     input: [
       { role: "system", content: systemPrompt },
       { role: "user", content: prompt },
     ],
-    temperature: 0.2,
     max_output_tokens: options.maxOutputTokens,
-  });
+  };
+  if (options.temperature !== undefined) {
+    requestBody.temperature = options.temperature;
+    logger.debug("Using temperature override:", options.temperature);
+  }
+
+  const response = await client.responses.create(requestBody);
 
   const rawOutput = extractOutputText(response);
   logger.debug("Raw model output:", rawOutput);

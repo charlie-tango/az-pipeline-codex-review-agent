@@ -10,9 +10,7 @@
   "bin": {
     "codex-azure-review": "dist/reviewPr.js"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsc",
     "dev": "pnpm exec tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug",

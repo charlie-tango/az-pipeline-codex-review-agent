@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "pnpm exec tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug",
+    "review:local": "pnpm exec tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug",
     "lint": "pnpm exec biome check .",
     "prepublishOnly": "pnpm run build",
     "release": "pnpm run lint && pnpm run typecheck && bumpp && pnpm publish --access public",

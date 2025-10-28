@@ -207,6 +207,25 @@ function createLogger(debugEnabled: boolean): Logger {
   };
 }
 
+function maskSecret(secret?: string): string | undefined {
+  if (!secret) {
+    return undefined;
+  }
+  if (secret.length <= 4) {
+    return "***";
+  }
+  return `${secret.slice(0, 2)}***${secret.slice(-2)}`;
+}
+
+function redactOptions(options: CliOptions): Record<string, unknown> {
+  const { azureToken, openaiApiKey, ...rest } = options;
+  return {
+    ...rest,
+    azureToken: maskSecret(azureToken),
+    openaiApiKey: maskSecret(openaiApiKey),
+  };
+}
+
 function envInt(name: string): number | undefined {
   const value = process.env[name];
   if (!value) {
@@ -1073,6 +1092,10 @@ async function resolveRepositoryId(options: CliOptions, gitApi: IGitApi): Promis
 async function main(): Promise<void> {
   const options = parseArgs();
   logger = createLogger(options.debug);
+
+  if (options.debug) {
+    logger.debug("CLI options:", JSON.stringify(redactOptions(options), null, 2));
+  }
 
   const startTime = Date.now();
 

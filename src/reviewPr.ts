@@ -226,6 +226,13 @@ function redactOptions(options: CliOptions): Record<string, unknown> {
   };
 }
 
+function resolveOrganizationUrl(org: string): string {
+  if (org.startsWith("http")) {
+    return org.replace(/\/$/, "");
+  }
+  return `https://dev.azure.com/${org.replace(/^\//, "")}`;
+}
+
 function envInt(name: string): number | undefined {
   const value = process.env[name];
   if (!value) {
@@ -379,13 +386,13 @@ function parseArgs(): CliOptions {
 
 async function runCommand(
   command: string[],
-  options: { allowFailure?: boolean } = {},
+  options: { allowFailure?: boolean; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string> {
   const [file, ...args] = command;
   logger.debug("Running command:", command.join(" "));
   try {
     const { stdout } = await execFileAsync(file, args, {
-      env: process.env,
+      env: options.env ?? process.env,
       maxBuffer: 20 * 1024 * 1024,
     });
     return stdout;
@@ -688,6 +695,20 @@ async function resolvePullRequestTargetBranch(options: CliOptions): Promise<stri
     return undefined;
   }
 
+  if (options.azureToken) {
+    try {
+      const azTarget = await resolvePullRequestTargetBranchWithAzCli(options);
+      if (azTarget) {
+        return azTarget;
+      }
+    } catch (error) {
+      logger.debug(
+        "Azure CLI target branch lookup failed: %s",
+        (error as Error).message ?? String(error),
+      );
+    }
+  }
+
   if (!options.azureToken) {
     throw new ReviewError("Azure DevOps PAT is required to resolve pull request target branch.");
   }
@@ -696,6 +717,54 @@ async function resolvePullRequestTargetBranch(options: CliOptions): Promise<stri
   const pr = await gitApi.getPullRequest(repositoryId, options.prId, options.project);
 
   return pr?.targetRefName ?? undefined;
+}
+
+async function resolvePullRequestTargetBranchWithAzCli(
+  options: CliOptions,
+): Promise<string | undefined> {
+  if (!options.project || !options.organization) {
+    return undefined;
+  }
+  if (!options.prId) {
+    return undefined;
+  }
+
+  const orgUrl = resolveOrganizationUrl(options.organization);
+  const env = {
+    ...process.env,
+    AZURE_DEVOPS_EXT_PAT: options.azureToken ?? process.env.AZURE_DEVOPS_EXT_PAT,
+  };
+
+  const azArgs = [
+    "az",
+    "repos",
+    "pr",
+    "show",
+    "--id",
+    String(options.prId),
+    "--organization",
+    orgUrl,
+    "--project",
+    options.project,
+    "--output",
+    "json",
+  ];
+
+  const stdout = await runCommand(azArgs, { allowFailure: true, env });
+  if (!stdout.trim()) {
+    return undefined;
+  }
+
+  try {
+    const payload = JSON.parse(stdout) as { targetRefName?: string | null };
+    return payload.targetRefName ?? undefined;
+  } catch (error) {
+    logger.debug(
+      "Failed to parse Azure CLI pull request payload: %s",
+      (error as Error).message ?? String(error),
+    );
+    return undefined;
+  }
 }
 
 async function callCodex(
@@ -1063,9 +1132,7 @@ async function ensureGitClient(
     );
   }
 
-  const orgUrl = options.organization.startsWith("http")
-    ? options.organization.replace(/\/$/, "")
-    : `https://dev.azure.com/${options.organization.replace(/^\//, "")}`;
+  const orgUrl = resolveOrganizationUrl(options.organization);
 
   const authHandler = azdev.getPersonalAccessTokenHandler(token);
   const connection = new azdev.WebApi(orgUrl, authHandler);

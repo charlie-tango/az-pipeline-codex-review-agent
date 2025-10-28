@@ -11,8 +11,9 @@ When run inside an Azure Pipelines PR validation build, the CLI picks up the pul
 ## Prerequisites
 
 - Node.js 20+ (matches the runtime used in the Azure Pipelines template).
-- `OPENAI_API_KEY` for the Codex agent.
-- An Azure DevOps PAT with Code (Read & Write) scope, exposed as `AZURE_DEVOPS_PAT` or `SYSTEM_ACCESSTOKEN`.
+- `OPENAI_API_KEY` for the Codex agent, stored as a secure pipeline secret/variable.
+- An Azure DevOps PAT with Code (Read & Write) scope (typically `$(System.AccessToken)`), exported as `AZURE_DEVOPS_PAT` or `SYSTEM_ACCESSTOKEN`.
+- Azure DevOps CLI (`az repos`) installed on the build agent so the reviewer can query PR metadata when a token is available.
 
 ## Typical Azure Pipelines usage
 

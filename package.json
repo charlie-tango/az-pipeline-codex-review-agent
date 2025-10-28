@@ -10,6 +10,9 @@
   "bin": {
     "codex-azure-review": "dist/reviewPr.js"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "files": ["dist"],
   "scripts": {
     "build": "tsc",

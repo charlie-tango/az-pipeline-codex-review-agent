@@ -251,6 +251,7 @@ const ArgsSchema = z.object({
     .max(120, "review-time-budget cannot exceed 120 minutes")
     .optional(),
   azureToken: z.string().trim().min(1, "azure-token cannot be empty").optional(),
+  openaiApiKey: z.string().trim().min(1, "openai-api-key cannot be empty").optional(),
 });
 
 function parseArgs(): CliOptions {
@@ -336,6 +337,11 @@ function parseArgs(): CliOptions {
       description:
         "Azure DevOps Personal Access Token (defaults to AZURE_DEVOPS_PAT or SYSTEM_ACCESSTOKEN).",
       default: process.env.AZURE_DEVOPS_PAT ?? process.env.SYSTEM_ACCESSTOKEN,
+    })
+    .option("openai-api-key", {
+      type: "string",
+      description: "OpenAI API key to use for Codex (defaults to OPENAI_API_KEY env var).",
+      default: process.env.OPENAI_API_KEY,
     })
     .help()
     .parseSync();
@@ -675,9 +681,10 @@ async function resolvePullRequestTargetBranch(options: CliOptions): Promise<stri
 
 async function callCodex(
   prompt: string,
-  options: { timeBudgetMinutes?: number } = {},
+  options: { timeBudgetMinutes?: number; apiKey?: string } = {},
 ): Promise<string> {
-  const codex = new Codex();
+  const codexOptions = options.apiKey ? { apiKey: options.apiKey } : undefined;
+  const codex = new Codex(codexOptions);
   const threadOptions: Parameters<Codex["startThread"]>[0] = {
     workingDirectory: process.cwd(),
     skipGitRepoCheck: true,
@@ -1080,8 +1087,15 @@ async function main(): Promise<void> {
       logger.info("Using Codex response fixture from", responsePath);
       rawJson = readFileSync(responsePath, "utf8");
     } else {
+      const openaiApiKey = options.openaiApiKey ?? process.env.OPENAI_API_KEY;
+      if (!openaiApiKey) {
+        throw new ReviewError(
+          "OpenAI API key not provided. Set OPENAI_API_KEY or pass --openai-api-key.",
+        );
+      }
       rawJson = await callCodex(prompt, {
         timeBudgetMinutes: options.reviewTimeBudget,
+        apiKey: openaiApiKey,
       });
     }
 

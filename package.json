@@ -40,6 +40,10 @@
     "tsx": "^4.19.1",
     "typescript": "^5.4.4"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "lint-staged": {
     "*": "pnpm exec biome lint --staged --write --no-errors-on-unmatched"
   },

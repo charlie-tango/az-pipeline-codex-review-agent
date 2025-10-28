@@ -288,7 +288,10 @@ function parseArgs(): CliOptions {
     .option("source-ref", {
       type: "string",
       description: "Source ref for diff comparisons.",
-      default: process.env.BUILD_SOURCEBRANCH,
+      default:
+        process.env.SYSTEM_PULLREQUEST_SOURCEBRANCH ??
+        process.env.BUILD_SOURCEBRANCH ??
+        process.env.BUILD_SOURCEVERSION,
     })
     .option("diff-file", {
       type: "string",
@@ -407,6 +410,20 @@ async function loadDiff(options: CliOptions): Promise<string> {
     }
   }
 
+  if (!targetBranch) {
+    try {
+      const inferred = await inferTargetBranch(options);
+      if (inferred) {
+        targetBranch = inferred;
+        logger.info("Inferred target branch from repository default: %s", targetBranch);
+      }
+    } catch (error) {
+      const message = (error as Error).message;
+      logger.warn("Failed to infer target branch from repository: %s", message);
+      errors.push(message);
+    }
+  }
+
   if (targetBranch) {
     try {
       return await gitDiff({ ...options, targetBranch });
@@ -426,6 +443,126 @@ async function loadDiff(options: CliOptions): Promise<string> {
   );
 }
 
+async function inferTargetBranch(options: CliOptions): Promise<string | undefined> {
+  const envCandidates = [
+    process.env.DEFAULT_BRANCH,
+    process.env.GITHUB_BASE_REF,
+    process.env.BUILD_REPOSITORY_DEFAULT_BRANCH,
+  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+  for (const candidate of envCandidates) {
+    const normalized = normalizeBranchRef(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  if (options.azureToken) {
+    try {
+      const defaultFromAzure = await resolveDefaultBranchFromAzure(options);
+      if (defaultFromAzure) {
+        return defaultFromAzure;
+      }
+    } catch (error) {
+      logger.debug(
+        "Failed to resolve repository default branch from Azure DevOps: %s",
+        (error as Error).message,
+      );
+    }
+  }
+
+  const symbolicRef = (
+    await runCommand(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], { allowFailure: true })
+  ).trim();
+  if (symbolicRef) {
+    const match = symbolicRef.match(/^refs\/remotes\/origin\/(.+)$/);
+    if (match?.[1]) {
+      return `refs/heads/${match[1]}`;
+    }
+  }
+
+  const remoteInfo = (
+    await runCommand(["git", "remote", "show", "origin"], { allowFailure: true })
+  ).trim();
+  if (remoteInfo) {
+    const headMatch = remoteInfo.match(/HEAD branch: (.+)/);
+    if (headMatch?.[1]) {
+      const branch = headMatch[1].trim();
+      const normalized = normalizeBranchRef(branch);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeBranchRef(input?: string): string | undefined {
+  if (!input) {
+    return undefined;
+  }
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (trimmed.startsWith("refs/heads/")) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("refs/remotes/origin/")) {
+    const branch = trimmed.slice("refs/remotes/origin/".length);
+    return branch ? `refs/heads/${branch}` : undefined;
+  }
+  if (trimmed.startsWith("refs/")) {
+    return trimmed;
+  }
+
+  const sanitized = trimmed.replace(/^origin\//, "").replace(/^heads\//, "");
+  if (!sanitized) {
+    return undefined;
+  }
+  return `refs/heads/${sanitized}`;
+}
+
+async function resolveDefaultBranchFromAzure(options: CliOptions): Promise<string | undefined> {
+  const { gitApi, repositoryId } = await ensureGitClient(options);
+  const repository = await gitApi.getRepository(repositoryId, options.project);
+  const defaultBranch = repository?.defaultBranch;
+  return normalizeBranchRef(defaultBranch ?? undefined);
+}
+
+async function resolveSourceRef(sourceRef?: string): Promise<string> {
+  if (sourceRef && (await refExists(sourceRef))) {
+    return sourceRef;
+  }
+
+  if (sourceRef?.startsWith("refs/heads/")) {
+    const branch = sourceRef.slice("refs/heads/".length);
+    if (branch && (await refExists(`origin/${branch}`))) {
+      logger.info("Resolved source ref %s to origin/%s", sourceRef, branch);
+      return `origin/${branch}`;
+    }
+  }
+
+  if (!(await refExists("HEAD"))) {
+    throw new ReviewError("HEAD ref not available in repository.");
+  }
+  if (sourceRef) {
+    logger.warn("Source ref %s unavailable; falling back to HEAD.", sourceRef);
+  }
+  return "HEAD";
+}
+
+async function refExists(ref: string): Promise<boolean> {
+  try {
+    await execFileAsync("git", ["rev-parse", "--verify", `${ref}^{commit}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function gitDiff(options: CliOptions): Promise<string> {
   const targetBranch = options.targetBranch ?? "";
   const branchName = targetBranch.startsWith("refs/heads/")
@@ -436,7 +573,7 @@ async function gitDiff(options: CliOptions): Promise<string> {
   await runCommand(["git", "fetch", "origin", branchName], {
     allowFailure: false,
   });
-  const sourceRef = options.sourceRef ?? "HEAD";
+  const sourceRef = await resolveSourceRef(options.sourceRef);
   logger.info("Computing git diff", `${fetchRef}...${sourceRef}`);
   const diff = await runCommand(["git", "diff", "--unified=3", `${fetchRef}...${sourceRef}`]);
   if (!diff.trim()) {

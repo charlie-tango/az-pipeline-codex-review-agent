@@ -1,7 +1,8 @@
 {
   "name": "@charlietango/az-pipeline-codex-review-agent",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Codex-based pull request review agent that posts feedback to Azure DevOps",
+  "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d",
   "license": "MIT",
   "type": "module",
   "main": "dist/reviewPr.js",
@@ -9,6 +10,9 @@
   "bin": {
     "codex-azure-review": "dist/reviewPr.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "pnpm exec tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug",
@@ -40,7 +44,5 @@
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged"
-  },
-  "files": ["dist"],
-  "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d"
+  }
 }

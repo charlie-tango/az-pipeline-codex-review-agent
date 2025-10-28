@@ -1004,6 +1004,10 @@ async function postOverallComment(
   gitApi?: IGitApi,
   repositoryId?: string,
 ): Promise<void> {
+  if (!options.prId) {
+    logger.info("No pull request ID detected; skipping overall review comment.");
+    return;
+  }
   const contentLines: string[] = [review.summary || "Automated review completed."];
   if (review.findings.length > 0) {
     contentLines.push("", "### Findings", ...buildFindingsSummary(review.findings));
@@ -1038,6 +1042,10 @@ async function postSuggestions(
   gitApi?: IGitApi,
   repositoryId?: string,
 ): Promise<void> {
+  if (!options.prId) {
+    logger.info("No pull request ID detected; skipping inline suggestion threads.");
+    return;
+  }
   if (review.suggestions.length === 0) {
     logger.info("No suggestions to post.");
     return;

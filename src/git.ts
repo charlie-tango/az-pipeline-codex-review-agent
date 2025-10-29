@@ -244,14 +244,71 @@ async function resolvePullRequestTargetBranchWithAzCli(
   }
 }
 
-async function resolveSourceRef(sourceRef?: string): Promise<string> {
-  if (sourceRef && (await refExists(sourceRef))) {
-    return sourceRef;
+async function resolveSourceRef(options: CliOptions): Promise<string> {
+  const logger = getLogger();
+  const sourceRef = options.sourceRef;
+
+  if (sourceRef) {
+    const resolved = await resolveExplicitSourceRef(sourceRef);
+    if (resolved) {
+      if (resolved !== sourceRef) {
+        logger.debug("Resolved source ref %s to %s", sourceRef, resolved);
+      }
+      return resolved;
+    }
+    logger.warn(
+      "Configured source ref %s not found locally; falling back to repository HEAD.",
+      sourceRef,
+    );
   }
+
   if (await refExists("HEAD")) {
     return "HEAD";
   }
   throw new ReviewError("Source ref not available. Ensure the repository has a HEAD commit.");
+}
+
+async function resolveExplicitSourceRef(ref: string): Promise<string | undefined> {
+  if (await refExists(ref)) {
+    return ref;
+  }
+
+  const logger = getLogger();
+  const candidates = new Set<string>();
+  const fetchTargets = new Set<string>();
+
+  if (ref.startsWith("refs/heads/")) {
+    const branch = ref.slice("refs/heads/".length);
+    candidates.add(`refs/remotes/origin/${branch}`);
+    candidates.add(`origin/${branch}`);
+    candidates.add(branch);
+    fetchTargets.add(branch);
+  } else if (ref.startsWith("refs/remotes/origin/")) {
+    const branch = ref.slice("refs/remotes/origin/".length);
+    candidates.add(`origin/${branch}`);
+    candidates.add(`refs/heads/${branch}`);
+    candidates.add(branch);
+    fetchTargets.add(branch);
+  } else if (ref.startsWith("origin/")) {
+    const branch = ref.slice("origin/".length);
+    candidates.add(`refs/remotes/origin/${branch}`);
+    candidates.add(`refs/heads/${branch}`);
+    candidates.add(branch);
+    fetchTargets.add(branch);
+  }
+
+  for (const target of fetchTargets) {
+    logger.debug("Fetching source branch origin/%s", target);
+    await runCommand(["git", "fetch", "origin", target], { allowFailure: true });
+  }
+
+  for (const candidate of [ref, ...candidates]) {
+    if (await refExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
 }
 
 async function refExists(ref: string): Promise<boolean> {
@@ -273,7 +330,7 @@ async function gitDiff(options: CliOptions): Promise<string> {
   await runCommand(["git", "fetch", "origin", branchName], {
     allowFailure: false,
   });
-  const sourceRef = await resolveSourceRef(options.sourceRef);
+  const sourceRef = await resolveSourceRef(options);
   getLogger().info("Computing git diff", `${fetchRef}...${sourceRef}`);
   const diff = await runCommand(["git", "diff", "--unified=3", `${fetchRef}...${sourceRef}`]);
   if (!diff.trim()) {

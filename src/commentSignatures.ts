@@ -19,7 +19,10 @@ export function buildCommentSignature({
   if (!content) {
     return undefined;
   }
-  const normalizedContent = content.trim().replace(/\s+$/u, "");
+  const normalizedContent = content
+    .replace(/\r\n/g, "\n")
+    .replace(/\s+$/u, "")
+    .trim();
   if (normalizedContent.length === 0) {
     return undefined;
   }

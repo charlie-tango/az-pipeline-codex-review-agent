@@ -47,6 +47,11 @@ export async function callCodex(
     },
     {
       type: "text" as const,
+      text:
+        "When emitting suggestion replacement text, include only the new lines exactly as they should appear in the file—do not repeat the original/removed code inside the suggestion block.",
+    },
+    {
+      type: "text" as const,
       text: prompt,
     },
   );

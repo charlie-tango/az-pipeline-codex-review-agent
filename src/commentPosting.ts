@@ -119,7 +119,16 @@ export async function postSuggestions(
       }
     }
     contextLines.push(suggestion.comment);
-    const sanitizedReplacement = normalizeLineEndings(suggestion.replacement).trimEnd();
+    const sanitizedReplacement = sanitizeSuggestionReplacement(suggestion);
+    if (!sanitizedReplacement) {
+      logger.debug(
+        "Skipping suggestion with empty replacement for %s:%s-%s",
+        suggestion.file,
+        suggestion.startLine,
+        suggestion.endLine,
+      );
+      continue;
+    }
     const renderedReplacement = renderReplacementForSuggestion(sanitizedReplacement);
     const suggestionBlock = `${contextLines
       .filter((line) => line && line.trim().length > 0)

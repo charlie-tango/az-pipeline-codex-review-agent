@@ -4,8 +4,8 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { z } from "zod";
 
-import { ReviewError } from "./errors.js";
-import { maskSecret } from "./utils.js";
+import { ReviewError } from "./errors";
+import { maskSecret } from "./utils";
 
 const integerFromString = z.coerce.number().int();
 
@@ -45,6 +45,7 @@ export const ArgsSchema = z.object({
     .optional(),
   azureToken: z.string().trim().min(1, "azure-token cannot be empty").optional(),
   openaiApiKey: z.string().trim().min(1, "openai-api-key cannot be empty").optional(),
+  ignoreFiles: z.array(z.string().trim().min(1)).optional().default([]),
 });
 
 export type CliOptions = z.infer<typeof ArgsSchema>;
@@ -146,6 +147,13 @@ export function parseArgs(): CliOptions {
       type: "string",
       description: "OpenAI API key to use for Codex (defaults to OPENAI_API_KEY env var).",
       default: process.env.OPENAI_API_KEY,
+    })
+    .option("ignore-files", {
+      type: "string",
+      array: true,
+      description:
+        "Glob patterns for files to ignore during review (repeatable). Matches are excluded from analysis.",
+      default: [],
     })
     .help()
     .parseSync();

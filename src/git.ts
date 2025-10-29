@@ -2,12 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import type { CliOptions } from "./cli.js";
-import { runCommand } from "./command.js";
-import { ensureGitClient, resolveOrganizationUrl } from "./azure.js";
-import { ReviewError } from "./errors.js";
-import { getLogger } from "./logging.js";
-import type { FileDiff } from "./types.js";
+import type { CliOptions } from "./cli";
+import { runCommand } from "./command";
+import { ensureGitClient, resolveOrganizationUrl } from "./azure";
+import { ReviewError } from "./errors";
+import { getLogger } from "./logging";
+import type { FileDiff } from "./types";
 
 export async function loadDiff(options: CliOptions): Promise<string> {
   const logger = getLogger();

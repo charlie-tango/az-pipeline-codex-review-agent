@@ -4,17 +4,18 @@ import path from "node:path";
 import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
-import type { CliOptions } from "./cli.js";
+import type { CliOptions } from "./cli";
 import {
   buildCommentSignature,
   buildSuggestionSignaturePayload,
   normalizeThreadFilePath,
-} from "./commentSignatures.js";
-import { createThreadViaRest } from "./azure.js";
-import { ReviewError } from "./errors.js";
-import { getLogger } from "./logging.js";
-import { buildFindingsSummary } from "./reviewProcessing.js";
-import type { ReviewResult, ReviewSuggestion } from "./types.js";
+} from "./commentSignatures";
+import { createThreadViaRest } from "./azure";
+import { ReviewError } from "./errors";
+import { getLogger } from "./logging";
+import { buildFindingsSummary } from "./reviewProcessing";
+import type { ReviewResult, ReviewSuggestion } from "./types";
+import { shouldIgnoreFile } from "./ignore";
 
 export async function postOverallComment(
   options: CliOptions,
@@ -94,6 +95,13 @@ export async function postSuggestions(
   }
 
   for (const suggestion of review.suggestions) {
+    if (shouldIgnoreFile(suggestion.file, options.ignoreFiles)) {
+      logger.debug(
+        "Skipping suggestion for ignored file %s",
+        suggestion.file,
+      );
+      continue;
+    }
     const contextLines: string[] = [];
     if (suggestion.originFinding) {
       const severity = suggestion.originFinding.severity;

@@ -2,10 +2,10 @@ import azdev from "azure-devops-node-api";
 import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
-import type { CliOptions } from "./cli.js";
-import { buildCommentSignature, normalizeThreadFilePath } from "./commentSignatures.js";
-import { ReviewError } from "./errors.js";
-import { getLogger } from "./logging.js";
+import type { CliOptions } from "./cli";
+import { buildCommentSignature, normalizeThreadFilePath } from "./commentSignatures";
+import { ReviewError } from "./errors";
+import { getLogger } from "./logging";
 
 export function resolveOrganizationUrl(org: string): string {
   if (org.startsWith("http")) {

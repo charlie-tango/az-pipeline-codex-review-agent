@@ -4,24 +4,20 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
-import { callCodex } from "./codex.js";
+import { type CliOptions, parseArgs, redactOptions } from "./cli";
+import { callCodex } from "./codex";
 import {
   ensureGitClient,
   fetchExistingCommentSignatures,
   type IGitApi,
-} from "./azure.js";
-import {
-  loadDiff,
-  parseUnifiedDiff,
-  truncateFiles,
-  buildPrompt,
-} from "./git.js";
-import { createLogger, setLogger, getLogger } from "./logging.js";
-import { postOverallComment, postSuggestions } from "./commentPosting.js";
-import { parseReview, logReview } from "./reviewProcessing.js";
-import { ReviewError } from "./errors.js";
-import { formatElapsed } from "./utils.js";
+} from "./azure";
+import { loadDiff, parseUnifiedDiff, truncateFiles, buildPrompt } from "./git";
+import { createLogger, setLogger, getLogger } from "./logging";
+import { postOverallComment, postSuggestions } from "./commentPosting";
+import { filterReviewByIgnorePatterns, logReview, parseReview } from "./reviewProcessing";
+import { ReviewError } from "./errors";
+import { formatElapsed } from "./utils";
+import { filterFileDiffs } from "./ignore";
 
 async function main(): Promise<void> {
   let options: CliOptions;
@@ -50,8 +46,17 @@ async function main(): Promise<void> {
   try {
     const diffText = await loadDiff(options);
     const fileDiffs = parseUnifiedDiff(diffText);
+    const filteredDiffs = filterFileDiffs(fileDiffs, options.ignoreFiles);
+
+    if (filteredDiffs.length === 0) {
+      logger.info(
+        "All changed files are ignored by configured patterns; skipping Codex review.",
+      );
+      return;
+    }
+
     const truncated = truncateFiles(
-      fileDiffs,
+      filteredDiffs,
       options.maxFiles,
       options.maxDiffChars,
     );
@@ -59,12 +64,16 @@ async function main(): Promise<void> {
 
     const rawJson = await obtainReviewJson(prompt, options);
     const review = parseReview(rawJson);
+    const filteredReview = filterReviewByIgnorePatterns(
+      review,
+      options.ignoreFiles,
+    );
 
     if (options.outputJson) {
       writeFileSync(path.resolve(options.outputJson), rawJson, "utf8");
     }
 
-    logReview(review);
+    logReview(filteredReview);
 
     let gitApi: IGitApi | undefined;
     let repositoryId: string | undefined;
@@ -84,14 +93,14 @@ async function main(): Promise<void> {
 
     await postSuggestions(
       options,
-      review,
+      filteredReview,
       gitApi,
       repositoryId,
       existingCommentSignatures,
     );
     await postOverallComment(
       options,
-      review,
+      filteredReview,
       gitApi,
       repositoryId,
       existingCommentSignatures,

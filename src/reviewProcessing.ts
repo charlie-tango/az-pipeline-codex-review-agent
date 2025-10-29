@@ -1,9 +1,10 @@
 import { z } from "zod";
 
-import { ReviewError } from "./errors.js";
-import { getLogger } from "./logging.js";
-import { ReviewSchema } from "./schemas.js";
-import type { Finding, ReviewResult, ReviewSuggestion } from "./types.js";
+import { ReviewError } from "./errors";
+import { filterSuggestionsByIgnorePatterns, shouldIgnoreFile } from "./ignore";
+import { getLogger } from "./logging";
+import { ReviewSchema } from "./schemas";
+import type { Finding, ReviewResult, ReviewSuggestion } from "./types";
 
 export function parseReview(rawJson: string): ReviewResult {
   let jsonPayload: unknown;
@@ -172,4 +173,49 @@ export function logReview(review: ReviewResult): void {
       );
     }
   }
+}
+
+export function filterReviewByIgnorePatterns(
+  review: ReviewResult,
+  patterns: readonly string[] | undefined,
+): ReviewResult {
+  if (!patterns || patterns.length === 0) {
+    return review;
+  }
+
+  const filteredSuggestions = filterSuggestionsByIgnorePatterns(review.suggestions, patterns);
+  const suggestionKeys = new Set(
+    filteredSuggestions.map(
+      (suggestion) =>
+        `${suggestion.file}:${suggestion.startLine}:${suggestion.endLine}:${suggestion.comment}:${suggestion.replacement}`,
+    ),
+  );
+
+  const filteredFindings = review.findings
+    .filter((finding) => {
+      const file = finding.file ?? finding.suggestion?.file;
+      if (!file) {
+        return true;
+      }
+      return !shouldIgnoreFile(file, patterns);
+    })
+    .map((finding) => {
+      if (!finding.suggestion) {
+        return finding;
+      }
+      const suggestionKey = finding.suggestion
+        ? `${finding.suggestion.file ?? finding.file ?? ""}:${finding.suggestion.start_line}:${finding.suggestion.end_line ?? finding.suggestion.start_line}:${finding.suggestion.comment}:${finding.suggestion.replacement}`
+        : "";
+      const matchesExisting = suggestionKey ? suggestionKeys.has(suggestionKey) : false;
+      if (!matchesExisting) {
+        return { ...finding, suggestion: null };
+      }
+      return finding;
+    });
+
+  return {
+    summary: review.summary,
+    findings: filteredFindings,
+    suggestions: filteredSuggestions,
+  };
 }

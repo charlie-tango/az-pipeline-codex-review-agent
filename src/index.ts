@@ -14,7 +14,7 @@ import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
 import { callCodex } from "./codex.js";
 import { postOverallComment, postSuggestions } from "./commentPosting.js";
 import { ReviewError } from "./errors.js";
-import { buildPrompt, loadDiff, parseUnifiedDiff, truncateFiles, type LoadedDiff } from "./git.js";
+import { type LoadedDiff, buildPrompt, loadDiff, parseUnifiedDiff, truncateFiles } from "./git.js";
 import { filterFileDiffs } from "./ignore.js";
 import { createLogger, getLogger, setLogger } from "./logging.js";
 import { filterReviewByIgnorePatterns, logReview, parseReview } from "./reviewProcessing.js";

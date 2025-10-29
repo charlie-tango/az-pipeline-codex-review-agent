@@ -19,10 +19,7 @@ export type LoadedDiff = {
   comparisonDescription: string;
 };
 
-export async function loadDiff(
-  options: CliOptions,
-  sinceCommit?: string,
-): Promise<LoadedDiff> {
+export async function loadDiff(options: CliOptions, sinceCommit?: string): Promise<LoadedDiff> {
   const logger = getLogger();
   if (options.diffFile) {
     const diffPath = path.resolve(options.diffFile);
@@ -350,10 +347,7 @@ async function refExists(ref: string): Promise<boolean> {
   }
 }
 
-async function gitDiff(
-  options: CliOptions,
-  sinceCommit?: string,
-): Promise<LoadedDiff> {
+async function gitDiff(options: CliOptions, sinceCommit?: string): Promise<LoadedDiff> {
   const logger = getLogger();
   const targetBranch = options.targetBranch ?? "";
   const branchName = targetBranch.startsWith("refs/heads/")

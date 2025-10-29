@@ -23,6 +23,7 @@ import {
 } from "./git.js";
 import { filterFileDiffs } from "./ignore.js";
 import { createLogger, getLogger, setLogger } from "./logging.js";
+import type { Logger } from "./logging.js";
 import {
   filterReviewByIgnorePatterns,
   logReview,
@@ -53,26 +54,9 @@ async function main(): Promise<void> {
   }
 
   const startTime = Date.now();
-  let existingCommentSummaries: ExistingCommentSummary[] = [];
-  let preFetchedSignatures: Set<string> | undefined;
-
-  if (options.prId && options.repositoryId && options.azureToken) {
-    try {
-      const existing = await fetchExistingCommentSignatures(
-        options,
-        options.repositoryId,
-      );
-      existingCommentSummaries = existing.summaries;
-      preFetchedSignatures = existing.signatures;
-    } catch (error) {
-      const message =
-        error instanceof ReviewError ? error.message : (error as Error).message;
-      logger.warn(
-        "Failed to load existing PR feedback for prompt context: %s",
-        message,
-      );
-    }
-  }
+  const prefetchResult = await prefetchExistingFeedback(options, logger);
+  let existingCommentSummaries = prefetchResult.summaries;
+  const preFetchedSignatures = prefetchResult.preFetchedSignatures;
 
   const previousReviewSha = findLatestReviewedSha(existingCommentSummaries);
 
@@ -106,13 +90,11 @@ async function main(): Promise<void> {
       options.maxDiffChars,
     );
     const diffPrompt = buildPrompt(truncated);
-    const existingFeedbackContext = buildExistingFeedbackContext(
+    const prompt = assembleReviewPrompt(
+      diffPrompt,
       existingCommentSummaries,
       previousReviewSha,
     );
-    const prompt = existingFeedbackContext
-      ? `${existingFeedbackContext}\n\n---\n\n${diffPrompt}`
-      : diffPrompt;
 
     const rawJson = await obtainReviewJson(prompt, options);
     const review = parseReview(rawJson);
@@ -127,42 +109,26 @@ async function main(): Promise<void> {
 
     logReview(filteredReview);
 
-    let gitApi: IGitApi | undefined;
-    let repositoryId: string | undefined;
-    let existingCommentSignatures: Set<string> | undefined =
-      preFetchedSignatures ? new Set(preFetchedSignatures) : undefined;
-
-    if (!options.dryRun && options.prId) {
-      const client = await ensureGitClient(options);
-      gitApi = client.gitApi;
-      repositoryId = client.repositoryId;
-
-      const existing = await fetchExistingCommentSignatures(
-        options,
-        repositoryId,
-        gitApi,
-      );
-      existingCommentSignatures = existingCommentSignatures
-        ? new Set([...existingCommentSignatures, ...existing.signatures])
-        : existing.signatures;
-      if (existing.summaries.length > 0) {
-        existingCommentSummaries = existing.summaries;
-      }
-    }
+    const postingContext = await preparePostingContext(
+      options,
+      preFetchedSignatures,
+      existingCommentSummaries,
+    );
+    existingCommentSummaries = postingContext.summaries;
 
     await postSuggestions(
       options,
       filteredReview,
-      gitApi,
-      repositoryId,
-      existingCommentSignatures,
+      postingContext.gitApi,
+      postingContext.repositoryId,
+      postingContext.existingCommentSignatures,
     );
     await postOverallComment(
       options,
       filteredReview,
-      gitApi,
-      repositoryId,
-      existingCommentSignatures,
+      postingContext.gitApi,
+      postingContext.repositoryId,
+      postingContext.existingCommentSignatures,
       diffInfo.sourceSha,
     );
 
@@ -265,6 +231,97 @@ function buildExistingFeedbackContext(
     "Existing PR feedback already posted, you MUST NOT report issues that are already covered by existing feedback, if there are no findings then you SHOULD not post at all:",
     ...lines,
   ].join("\n");
+}
+
+type PrefetchResult = {
+  summaries: ExistingCommentSummary[];
+  preFetchedSignatures?: Set<string>;
+};
+
+async function prefetchExistingFeedback(
+  options: CliOptions,
+  logger: Logger,
+): Promise<PrefetchResult> {
+  if (options.prId && options.repositoryId && options.azureToken) {
+    try {
+      const existing = await fetchExistingCommentSignatures(
+        options,
+        options.repositoryId,
+      );
+      return {
+        summaries: existing.summaries,
+        preFetchedSignatures: existing.signatures,
+      };
+    } catch (error) {
+      const message =
+        error instanceof ReviewError ? error.message : (error as Error).message;
+      logger.warn(
+        "Failed to load existing PR feedback for prompt context: %s",
+        message,
+      );
+    }
+  }
+
+  return { summaries: [], preFetchedSignatures: undefined };
+}
+
+type PostingContext = {
+  gitApi?: IGitApi;
+  repositoryId?: string;
+  existingCommentSignatures?: Set<string>;
+  summaries: ExistingCommentSummary[];
+};
+
+async function preparePostingContext(
+  options: CliOptions,
+  preFetchedSignatures: Set<string> | undefined,
+  existingCommentSummaries: ExistingCommentSummary[],
+): Promise<PostingContext> {
+  let gitApi: IGitApi | undefined;
+  let repositoryId: string | undefined;
+  let signatures = preFetchedSignatures
+    ? new Set(preFetchedSignatures)
+    : undefined;
+  let summaries = existingCommentSummaries;
+
+  if (!options.dryRun && options.prId) {
+    const client = await ensureGitClient(options);
+    gitApi = client.gitApi;
+    repositoryId = client.repositoryId;
+
+    const existing = await fetchExistingCommentSignatures(
+      options,
+      repositoryId,
+      gitApi,
+    );
+    signatures = signatures
+      ? new Set([...signatures, ...existing.signatures])
+      : existing.signatures;
+    if (existing.summaries.length > 0) {
+      summaries = existing.summaries;
+    }
+  }
+
+  return {
+    gitApi,
+    repositoryId,
+    existingCommentSignatures: signatures,
+    summaries,
+  };
+}
+
+function assembleReviewPrompt(
+  diffPrompt: string,
+  existingSummaries: ExistingCommentSummary[],
+  previousReviewSha: string | undefined,
+): string {
+  const existingFeedbackContext = buildExistingFeedbackContext(
+    existingSummaries,
+    previousReviewSha,
+  );
+  return existingFeedbackContext
+    ? `${existingFeedbackContext}\n\n---\n\n${diffPrompt}`
+    : diffPrompt;
 }
 
 void main();

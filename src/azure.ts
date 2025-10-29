@@ -199,48 +199,65 @@ type RestThread = {
   };
 };
 
-async function fetchExistingCommentSignaturesViaRest(
-  options: CliOptions,
-  repositoryId: string,
-): Promise<{ signatures: Set<string>; summaries: ExistingCommentSummary[] }> {
-  const token = options.azureToken;
-  if (!token) {
-    throw new ReviewError(
-      "Azure DevOps PAT not provided. Set AZURE_DEVOPS_PAT, SYSTEM_ACCESSTOKEN, or pass --azure-token.",
-    );
+export class AzureThreadService {
+  constructor(private readonly options: CliOptions, private readonly gitApi?: IGitApi) {}
+
+  async fetchExisting(
+    repositoryId?: string,
+  ): Promise<{ signatures: Set<string>; summaries: ExistingCommentSummary[] }> {
+    const signatures = new Set<string>();
+    const summaries: ExistingCommentSummary[] = [];
+
+    if (!this.options.prId || !repositoryId) {
+      return { signatures, summaries };
+    }
+
+    const clientThreads = await this.tryFetchWithClient(repositoryId);
+    if (clientThreads) {
+      for (const thread of clientThreads ?? []) {
+        recordThreadSignatures(thread, signatures, summaries);
+      }
+      return { signatures, summaries };
+    }
+
+    await this.tryFetchWithRest(repositoryId, signatures, summaries);
+    return { signatures, summaries };
   }
 
-  const url = buildThreadsUrl(options, repositoryId);
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Basic ${buildAuthHeader(token)}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errorBody = (await response.text()).trim();
-    throw new ReviewError(
-      `Azure DevOps REST list threads failed (${response.status} ${response.statusText})${
-        errorBody ? `: ${errorBody}` : ""
-      }`,
-    );
+  private async tryFetchWithClient(
+    repositoryId: string,
+  ): Promise<GitInterfaces.GitPullRequestCommentThread[] | null> {
+    if (!this.gitApi) {
+      return null;
+    }
+    try {
+      return await this.gitApi.getThreads(repositoryId, this.options.prId!, this.options.project);
+    } catch (error) {
+      getLogger().warn(
+        "Failed to fetch existing threads via Azure DevOps client: %s",
+        (error as Error).message,
+      );
+      return null;
+    }
   }
 
-  const payload = (await response.json()) as unknown;
-  const threads: RestThread[] = Array.isArray(payload)
-    ? (payload as RestThread[])
-    : Array.isArray((payload as { value?: RestThread[] }).value)
-      ? ((payload as { value?: RestThread[] }).value ?? [])
-      : [];
-
-  const signatures = new Set<string>();
-  const summaries: ExistingCommentSummary[] = [];
-  for (const thread of threads) {
-    recordThreadSignatures(thread, signatures, summaries);
+  private async tryFetchWithRest(
+    repositoryId: string,
+    signatures: Set<string>,
+    summaries: ExistingCommentSummary[],
+  ): Promise<void> {
+    try {
+      const threads = await fetchThreadsViaRest(this.options, repositoryId);
+      for (const thread of threads) {
+        recordThreadSignatures(thread, signatures, summaries);
+      }
+    } catch (error) {
+      getLogger().warn(
+        "Failed to fetch existing threads via REST API: %s",
+        (error as Error).message,
+      );
+    }
   }
-  return { signatures, summaries };
 }
 
 export async function fetchExistingCommentSignatures(
@@ -248,39 +265,8 @@ export async function fetchExistingCommentSignatures(
   repositoryId?: string,
   gitApi?: IGitApi,
 ): Promise<{ signatures: Set<string>; summaries: ExistingCommentSummary[] }> {
-  const logger = getLogger();
-  const signatures = new Set<string>();
-  const summaries: ExistingCommentSummary[] = [];
-  if (!options.prId || !repositoryId) {
-    return { signatures, summaries };
-  }
-
-  if (gitApi) {
-    try {
-      const threads = await gitApi.getThreads(repositoryId, options.prId, options.project);
-      for (const thread of threads ?? []) {
-        recordThreadSignatures(thread, signatures, summaries);
-      }
-      return { signatures, summaries };
-    } catch (error) {
-      logger.warn(
-        "Failed to fetch existing threads via Azure DevOps client: %s",
-        (error as Error).message,
-      );
-    }
-  }
-
-  try {
-    const restResult = await fetchExistingCommentSignaturesViaRest(options, repositoryId);
-    for (const signature of restResult.signatures) {
-      signatures.add(signature);
-    }
-    summaries.push(...restResult.summaries);
-  } catch (error) {
-    logger.warn("Failed to fetch existing threads via REST API: %s", (error as Error).message);
-  }
-
-  return { signatures, summaries };
+  const service = new AzureThreadService(options, gitApi);
+  return service.fetchExisting(repositoryId);
 }
 
 export async function createThreadViaRest(
@@ -326,3 +312,42 @@ export async function createThreadViaRest(
 
 export type { IGitApi };
 export { GitInterfaces };
+
+async function fetchThreadsViaRest(
+  options: CliOptions,
+  repositoryId: string,
+): Promise<RestThread[]> {
+  const token = options.azureToken;
+  if (!token) {
+    throw new ReviewError(
+      "Azure DevOps PAT not provided. Set AZURE_DEVOPS_PAT, SYSTEM_ACCESSTOKEN, or pass --azure-token.",
+    );
+  }
+
+  const url = buildThreadsUrl(options, repositoryId);
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Basic ${buildAuthHeader(token)}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.text()).trim();
+    throw new ReviewError(
+      `Azure DevOps REST list threads failed (${response.status} ${response.statusText})${
+        errorBody ? `: ${errorBody}` : ""
+      }`,
+    );
+  }
+
+  const payload = (await response.json()) as unknown;
+  if (Array.isArray(payload)) {
+    return payload as RestThread[];
+  }
+  if (Array.isArray((payload as { value?: RestThread[] }).value)) {
+    return ((payload as { value?: RestThread[] }).value ?? []) as RestThread[];
+  }
+  return [];
+}

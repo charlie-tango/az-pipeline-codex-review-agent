@@ -21,7 +21,7 @@
     "lint": "pnpm exec biome check .",
     "prepublishOnly": "pnpm run build",
     "release": "pnpm run lint && pnpm run typecheck && bumpp && pnpm publish --access public",
-    "test": "echo 'No tests defined'",
+    "test": "tsx --test tests/all.test.ts",
     "typecheck": "tsc --noEmit",
     "prepare": "simple-git-hooks"
   },

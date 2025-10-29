@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
-
 import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
@@ -15,7 +12,8 @@ import { ReviewError } from "./errors.js";
 import { shouldIgnoreFile } from "./ignore.js";
 import { getLogger } from "./logging.js";
 import { buildFindingsSummary } from "./reviewProcessing.js";
-import type { ReviewResult, ReviewSuggestion } from "./types.js";
+import { renderSuggestionComment } from "./suggestionRendering.js";
+import type { ReviewResult } from "./types.js";
 
 export async function postOverallComment(
   options: CliOptions,
@@ -103,24 +101,8 @@ export async function postSuggestions(
       logger.debug("Skipping suggestion for ignored file %s", suggestion.file);
       continue;
     }
-    const contextLines: string[] = [];
-    if (suggestion.originFinding) {
-      const title = suggestion.originFinding.title;
-      const details = suggestion.originFinding.details;
-      const headerParts = [];
-      if (title) {
-        headerParts.push(title);
-      }
-      if (headerParts.length > 0) {
-        contextLines.push(headerParts.join(" "));
-      }
-      if (details) {
-        contextLines.push(details);
-      }
-    }
-    contextLines.push(suggestion.comment);
-    const sanitizedReplacement = sanitizeSuggestionReplacement(suggestion);
-    if (!sanitizedReplacement) {
+    const rendered = renderSuggestionComment(suggestion);
+    if (!rendered) {
       logger.debug(
         "Skipping suggestion with empty replacement for %s:%s-%s",
         suggestion.file,
@@ -129,10 +111,7 @@ export async function postSuggestions(
       );
       continue;
     }
-    const renderedReplacement = renderReplacementForSuggestion(sanitizedReplacement);
-    const suggestionBlock = `${contextLines
-      .filter((line) => line && line.trim().length > 0)
-      .join("\n\n")}\n\n\`\`\`suggestion\n${renderedReplacement}\n\`\`\``;
+    const { body: suggestionBlock, sanitizedReplacement } = rendered;
 
     if (options.dryRun) {
       logger.info(
@@ -210,82 +189,4 @@ async function createThread(
 
   getLogger().info("Posting review thread to PR", options.prId);
   await gitApi.createThread(thread, repositoryId, options.prId, options.project);
-}
-
-function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): string {
-  let normalized = normalizeLineEndings(suggestion.replacement).replace(/\s+$/u, "");
-  if (!normalized) {
-    return normalized;
-  }
-
-  const originalSegment = readOriginalSegment(
-    suggestion.file,
-    suggestion.startLine,
-    suggestion.endLine,
-  );
-  if (!originalSegment) {
-    return normalized;
-  }
-
-  const trimmedOriginal = normalizeLineEndings(originalSegment).trim();
-  if (!trimmedOriginal) {
-    return normalized;
-  }
-
-  const pattern = new RegExp(`${escapeForRegex(trimmedOriginal)}\\s*$`, "u");
-  if (pattern.test(normalized)) {
-    const candidate = normalized.replace(pattern, "").trimEnd();
-    if (candidate.length > 0) {
-      normalized = candidate;
-    }
-  }
-
-  const originalLines = normalizeLineEndings(trimmedOriginal)
-    .split("\n")
-    .map((line) => line.trimEnd());
-  const sanitizedLines = normalizeLineEndings(normalized).split("\n");
-  const filteredLines = sanitizedLines.filter((line) => {
-    const trimmed = line.trimEnd();
-    if (trimmed.length === 0) {
-      return false;
-    }
-    return !originalLines.some((originalLine) => originalLine === trimmed);
-  });
-  const dedupedLines: string[] = [];
-  for (const line of filteredLines) {
-    if (dedupedLines.length === 0 || dedupedLines[dedupedLines.length - 1] !== line) {
-      dedupedLines.push(line);
-    }
-  }
-  if (dedupedLines.length > 0) {
-    normalized = dedupedLines.join("\n").replace(/\s+$/u, "");
-  }
-
-  return normalized;
-}
-
-function renderReplacementForSuggestion(replacement: string): string {
-  const normalized = normalizeLineEndings(replacement);
-  return normalized.replace(/\n/g, "\r\n");
-}
-
-function normalizeLineEndings(content: string): string {
-  return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-function readOriginalSegment(file: string, startLine: number, endLine: number): string | undefined {
-  const absolute = path.resolve(file);
-  if (!existsSync(absolute)) {
-    return undefined;
-  }
-  const content = readFileSync(absolute, "utf8");
-  const lines = content.split(/\r?\n/);
-  if (startLine < 1 || endLine < startLine || startLine > lines.length) {
-    return undefined;
-  }
-  return lines.slice(startLine - 1, Math.min(endLine, lines.length)).join("\n");
-}
-
-function escapeForRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

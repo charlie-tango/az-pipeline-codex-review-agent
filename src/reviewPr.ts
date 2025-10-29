@@ -28,14 +28,12 @@ interface ReviewSuggestion {
   comment: string;
   replacement: string;
   originFinding?: {
-    severity?: string;
     title?: string;
     details?: string;
   };
 }
 
 interface Finding {
-  severity?: string;
   file?: string;
   line?: number;
   title?: string;
@@ -75,7 +73,6 @@ const SuggestionInstructionSchema = z.object({
 });
 
 const FindingInstructionSchema = z.object({
-  severity: z.string(),
   file: z.string(),
   line: z.number().int(),
   title: z.string(),
@@ -91,12 +88,14 @@ const CodexInstructionSchema = z.object({
 
 const FindingSchema = z
   .object({
-    severity: z.string().optional(),
     file: z.string().optional(),
     line: integerFromString.optional(),
     title: z.string().optional(),
     details: z.string().optional(),
-    suggestion: z.union([SuggestionDetailsSchema, z.null()]).optional().default(null),
+    suggestion: z
+      .union([SuggestionDetailsSchema, z.null()])
+      .optional()
+      .default(null),
   })
   .passthrough();
 
@@ -248,10 +247,18 @@ const ArgsSchema = z.object({
     .int("pr-id must be an integer")
     .positive("pr-id must be positive")
     .optional(),
-  organization: z.string().trim().min(1, "organization cannot be empty").optional(),
+  organization: z
+    .string()
+    .trim()
+    .min(1, "organization cannot be empty")
+    .optional(),
   project: z.string().trim().min(1, "project cannot be empty").optional(),
   repository: z.string().trim().min(1, "repository cannot be empty").optional(),
-  repositoryId: z.string().trim().uuid("repository-id must be a valid UUID").optional(),
+  repositoryId: z
+    .string()
+    .trim()
+    .uuid("repository-id must be a valid UUID")
+    .optional(),
   targetBranch: z.string().trim().optional(),
   sourceRef: z.string().trim().optional(),
   diffFile: z.string().trim().optional(),
@@ -276,8 +283,16 @@ const ArgsSchema = z.object({
     .positive("review-time-budget must be positive")
     .max(120, "review-time-budget cannot exceed 120 minutes")
     .optional(),
-  azureToken: z.string().trim().min(1, "azure-token cannot be empty").optional(),
-  openaiApiKey: z.string().trim().min(1, "openai-api-key cannot be empty").optional(),
+  azureToken: z
+    .string()
+    .trim()
+    .min(1, "azure-token cannot be empty")
+    .optional(),
+  openaiApiKey: z
+    .string()
+    .trim()
+    .min(1, "openai-api-key cannot be empty")
+    .optional(),
 });
 
 function parseArgs(): CliOptions {
@@ -289,13 +304,16 @@ function parseArgs(): CliOptions {
     })
     .option("organization", {
       type: "string",
-      description: "Azure DevOps organization URL (https://dev.azure.com/contoso).",
-      default: process.env.AZURE_DEVOPS_ORG_URL ?? process.env.SYSTEM_COLLECTIONURI,
+      description:
+        "Azure DevOps organization URL (https://dev.azure.com/contoso).",
+      default:
+        process.env.AZURE_DEVOPS_ORG_URL ?? process.env.SYSTEM_COLLECTIONURI,
     })
     .option("project", {
       type: "string",
       description: "Azure DevOps project name.",
-      default: process.env.AZURE_DEVOPS_PROJECT ?? process.env.SYSTEM_TEAMPROJECT,
+      default:
+        process.env.AZURE_DEVOPS_PROJECT ?? process.env.SYSTEM_TEAMPROJECT,
     })
     .option("repository", {
       type: "string",
@@ -366,7 +384,8 @@ function parseArgs(): CliOptions {
     })
     .option("openai-api-key", {
       type: "string",
-      description: "OpenAI API key to use for Codex (defaults to OPENAI_API_KEY env var).",
+      description:
+        "OpenAI API key to use for Codex (defaults to OPENAI_API_KEY env var).",
       default: process.env.OPENAI_API_KEY,
     })
     .help()
@@ -407,7 +426,9 @@ async function runCommand(
       return err.stdout ?? "";
     }
     logger.error("Command failed:", stderr.trim());
-    throw new ReviewError(`Command ${command.join(" ")} failed: ${stderr.trim() || err.message}`);
+    throw new ReviewError(
+      `Command ${command.join(" ")} failed: ${stderr.trim() || err.message}`,
+    );
   }
 }
 
@@ -437,7 +458,10 @@ async function loadDiff(options: CliOptions): Promise<string> {
       }
     } catch (error) {
       const message = (error as Error).message;
-      logger.warn("Failed to resolve target branch from Azure DevOps: %s", message);
+      logger.warn(
+        "Failed to resolve target branch from Azure DevOps: %s",
+        message,
+      );
       errors.push(message);
     }
   }
@@ -447,7 +471,10 @@ async function loadDiff(options: CliOptions): Promise<string> {
       const inferred = await inferTargetBranch(options);
       if (inferred) {
         targetBranch = inferred;
-        logger.info("Inferred target branch from repository default: %s", targetBranch);
+        logger.info(
+          "Inferred target branch from repository default: %s",
+          targetBranch,
+        );
       }
     } catch (error) {
       const message = (error as Error).message;
@@ -467,7 +494,9 @@ async function loadDiff(options: CliOptions): Promise<string> {
   }
 
   if (errors.length > 0) {
-    throw new ReviewError(`Failed to load pull-request diff: ${errors.join("; ")}`);
+    throw new ReviewError(
+      `Failed to load pull-request diff: ${errors.join("; ")}`,
+    );
   }
 
   throw new ReviewError(
@@ -475,12 +504,16 @@ async function loadDiff(options: CliOptions): Promise<string> {
   );
 }
 
-async function inferTargetBranch(options: CliOptions): Promise<string | undefined> {
+async function inferTargetBranch(
+  options: CliOptions,
+): Promise<string | undefined> {
   const envCandidates = [
     process.env.DEFAULT_BRANCH,
     process.env.GITHUB_BASE_REF,
     process.env.BUILD_REPOSITORY_DEFAULT_BRANCH,
-  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+  ].filter((value): value is string =>
+    Boolean(value && value.trim().length > 0),
+  );
 
   for (const candidate of envCandidates) {
     const normalized = normalizeBranchRef(candidate);
@@ -504,7 +537,9 @@ async function inferTargetBranch(options: CliOptions): Promise<string | undefine
   }
 
   const symbolicRef = (
-    await runCommand(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], { allowFailure: true })
+    await runCommand(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], {
+      allowFailure: true,
+    })
   ).trim();
   if (symbolicRef) {
     const match = symbolicRef.match(/^refs\/remotes\/origin\/(.+)$/);
@@ -514,7 +549,9 @@ async function inferTargetBranch(options: CliOptions): Promise<string | undefine
   }
 
   const remoteInfo = (
-    await runCommand(["git", "remote", "show", "origin"], { allowFailure: true })
+    await runCommand(["git", "remote", "show", "origin"], {
+      allowFailure: true,
+    })
   ).trim();
   if (remoteInfo) {
     const headMatch = remoteInfo.match(/HEAD branch: (.+)/);
@@ -557,7 +594,9 @@ function normalizeBranchRef(input?: string): string | undefined {
   return `refs/heads/${sanitized}`;
 }
 
-async function resolveDefaultBranchFromAzure(options: CliOptions): Promise<string | undefined> {
+async function resolveDefaultBranchFromAzure(
+  options: CliOptions,
+): Promise<string | undefined> {
   const { gitApi, repositoryId } = await ensureGitClient(options);
   const repository = await gitApi.getRepository(repositoryId, options.project);
   const defaultBranch = repository?.defaultBranch;
@@ -607,7 +646,12 @@ async function gitDiff(options: CliOptions): Promise<string> {
   });
   const sourceRef = await resolveSourceRef(options.sourceRef);
   logger.info("Computing git diff", `${fetchRef}...${sourceRef}`);
-  const diff = await runCommand(["git", "diff", "--unified=3", `${fetchRef}...${sourceRef}`]);
+  const diff = await runCommand([
+    "git",
+    "diff",
+    "--unified=3",
+    `${fetchRef}...${sourceRef}`,
+  ]);
   if (!diff.trim()) {
     logger.warn("git diff returned no changes.");
   }
@@ -632,7 +676,9 @@ function parseUnifiedDiff(diffText: string): FileDiff[] {
       const parts = line.split(" ");
       if (parts.length >= 4) {
         const pathToken = parts[2];
-        currentPath = pathToken.startsWith("a/") ? pathToken.slice(2) : pathToken;
+        currentPath = pathToken.startsWith("a/")
+          ? pathToken.slice(2)
+          : pathToken;
       } else {
         currentPath = "unknown";
       }
@@ -655,7 +701,11 @@ function parseUnifiedDiff(diffText: string): FileDiff[] {
   return files;
 }
 
-function truncateFiles(files: FileDiff[], maxFiles: number, maxChars: number): FileDiff[] {
+function truncateFiles(
+  files: FileDiff[],
+  maxFiles: number,
+  maxChars: number,
+): FileDiff[] {
   const trimmed = files.slice(0, maxFiles);
   const totalChars = trimmed.reduce((acc, file) => acc + file.diff.length, 0);
   if (totalChars <= maxChars) {
@@ -679,18 +729,29 @@ function truncateFiles(files: FileDiff[], maxFiles: number, maxChars: number): F
   }
 
   if (result.length === 0) {
-    throw new ReviewError("Diff too large to include in prompt. Increase max-diff-chars.");
+    throw new ReviewError(
+      "Diff too large to include in prompt. Increase max-diff-chars.",
+    );
   }
 
   return result;
 }
 
 function buildPrompt(files: FileDiff[]): string {
-  const sections = files.map((file) => `File: ${file.path}\n\`\`\`\n${file.diff}\n\`\`\``);
+  const sections = files.map(
+    (file) => `File: ${file.path}\n\`\`\`\n${file.diff}\n\`\`\``,
+  );
   return sections.join("\n\n");
 }
 
-async function resolvePullRequestTargetBranch(options: CliOptions): Promise<string | undefined> {
+function normalizeThreadFilePath(file: string): string {
+  const normalized = file.replace(/\\/g, "/").replace(/^\/+/, "");
+  return `/${normalized}`;
+}
+
+async function resolvePullRequestTargetBranch(
+  options: CliOptions,
+): Promise<string | undefined> {
   if (!options.prId) {
     return undefined;
   }
@@ -710,11 +771,17 @@ async function resolvePullRequestTargetBranch(options: CliOptions): Promise<stri
   }
 
   if (!options.azureToken) {
-    throw new ReviewError("Azure DevOps PAT is required to resolve pull request target branch.");
+    throw new ReviewError(
+      "Azure DevOps PAT is required to resolve pull request target branch.",
+    );
   }
 
   const { gitApi, repositoryId } = await ensureGitClient(options);
-  const pr = await gitApi.getPullRequest(repositoryId, options.prId, options.project);
+  const pr = await gitApi.getPullRequest(
+    repositoryId,
+    options.prId,
+    options.project,
+  );
 
   return pr?.targetRefName ?? undefined;
 }
@@ -732,7 +799,8 @@ async function resolvePullRequestTargetBranchWithAzCli(
   const orgUrl = resolveOrganizationUrl(options.organization);
   const env = {
     ...process.env,
-    AZURE_DEVOPS_EXT_PAT: options.azureToken ?? process.env.AZURE_DEVOPS_EXT_PAT,
+    AZURE_DEVOPS_EXT_PAT:
+      options.azureToken ?? process.env.AZURE_DEVOPS_EXT_PAT,
   };
 
   const azArgs = [
@@ -775,6 +843,7 @@ async function callCodex(
   const codex = new Codex(codexOptions);
   const threadOptions: Parameters<Codex["startThread"]>[0] = {
     workingDirectory: process.cwd(),
+    sandboxMode: "read-only",
     skipGitRepoCheck: true,
   };
   const thread = codex.startThread(threadOptions);
@@ -783,11 +852,14 @@ async function callCodex(
   const instructions = [
     {
       type: "text" as const,
-      text: "You are an autonomous code-review assistant focused on actionable feedback.",
+      text: "/review",
     },
   ];
 
-  if (typeof options.timeBudgetMinutes === "number" && options.timeBudgetMinutes > 0) {
+  if (
+    typeof options.timeBudgetMinutes === "number" &&
+    options.timeBudgetMinutes > 0
+  ) {
     instructions.push({
       type: "text",
       text: `Work efficiently and limit your analysis to what you can cover in at most ${options.timeBudgetMinutes} minutes; prioritize the most important issues first.`,
@@ -861,7 +933,6 @@ function parseReview(rawJson: string): ReviewResult {
     context?: {
       file?: string;
       line?: number;
-      severity?: string;
       title?: string;
       details?: string;
     },
@@ -885,7 +956,6 @@ function parseReview(rawJson: string): ReviewResult {
       replacement: source.replacement.replace(/\s+$/, ""),
       originFinding: context
         ? {
-            severity: context.severity,
             title: context.title,
             details: context.details,
           }
@@ -899,7 +969,6 @@ function parseReview(rawJson: string): ReviewResult {
 
   const findings: Finding[] = parsed.findings.map((finding) => {
     const normalized: Finding = {
-      severity: finding.severity,
       file: finding.file,
       line: finding.line,
       title: finding.title,
@@ -917,7 +986,6 @@ function parseReview(rawJson: string): ReviewResult {
       pushSuggestion(finding.suggestion, {
         file: finding.suggestion.file ?? finding.file,
         line: finding.suggestion.start_line ?? finding.line,
-        severity: finding.severity,
         title: finding.title,
         details: finding.details,
       });
@@ -941,13 +1009,12 @@ function formatZodError(error: z.ZodError): string {
 function buildFindingsSummary(findings: Finding[]): string[] {
   const lines: string[] = [];
   for (const finding of findings) {
-    const severity = (finding.severity ?? "info").toUpperCase();
     const filePath = finding.file ?? finding.suggestion?.file ?? "unknown";
     const lineNumber = finding.line ?? finding.suggestion?.start_line ?? "?";
     const title = finding.title ?? "";
     const details = finding.details ?? "";
     const headerParts = [
-      `- **${severity}** ${filePath}:${lineNumber}`,
+      `-  ${filePath}:${lineNumber}`,
       title ? `– ${title}` : "",
     ].filter(Boolean);
     const detailLines = [details]
@@ -976,7 +1043,6 @@ function logReview(review: ReviewResult): void {
       logger.info(
         "-",
         JSON.stringify({
-          severity: entry.severity,
           file: entry.file,
           line: entry.line,
           title: entry.title,
@@ -988,11 +1054,8 @@ function logReview(review: ReviewResult): void {
   if (review.suggestions.length > 0) {
     logger.info("Suggestions:");
     for (const suggestion of review.suggestions) {
-      const contextLabel = suggestion.originFinding?.severity
-        ? ` (${suggestion.originFinding.severity})`
-        : "";
       logger.info(
-        `- ${suggestion.file}:${suggestion.startLine}-${suggestion.endLine}${contextLabel} -> ${suggestion.comment.replace(/\s+/g, " ").slice(0, 80)}`,
+        `- ${suggestion.file}:${suggestion.startLine}-${suggestion.endLine} -> ${suggestion.comment.replace(/\s+/g, " ").slice(0, 80)}`,
       );
     }
   }
@@ -1005,12 +1068,20 @@ async function postOverallComment(
   repositoryId?: string,
 ): Promise<void> {
   if (!options.prId) {
-    logger.info("No pull request ID detected; skipping overall review comment.");
+    logger.info(
+      "No pull request ID detected; skipping overall review comment.",
+    );
     return;
   }
-  const contentLines: string[] = [review.summary || "Automated review completed."];
+  const contentLines: string[] = [
+    review.summary || "Automated review completed.",
+  ];
   if (review.findings.length > 0) {
-    contentLines.push("", "### Findings", ...buildFindingsSummary(review.findings));
+    contentLines.push(
+      "",
+      "### Findings",
+      ...buildFindingsSummary(review.findings),
+    );
   }
   const commentText = contentLines.join("\n").trim();
 
@@ -1046,7 +1117,9 @@ async function postSuggestions(
   repositoryId?: string,
 ): Promise<void> {
   if (!options.prId) {
-    logger.info("No pull request ID detected; skipping inline suggestion threads.");
+    logger.info(
+      "No pull request ID detected; skipping inline suggestion threads.",
+    );
     return;
   }
   if (review.suggestions.length === 0) {
@@ -1065,13 +1138,9 @@ async function postSuggestions(
   for (const suggestion of review.suggestions) {
     const contextLines: string[] = [];
     if (suggestion.originFinding) {
-      const severity = suggestion.originFinding.severity;
       const title = suggestion.originFinding.title;
       const details = suggestion.originFinding.details;
       const headerParts = [];
-      if (severity) {
-        headerParts.push(`**${severity.toUpperCase()}**`);
-      }
       if (title) {
         headerParts.push(title);
       }
@@ -1103,7 +1172,7 @@ async function postSuggestions(
         },
       ],
       threadContext: {
-        filePath: suggestion.file,
+        filePath: normalizeThreadFilePath(suggestion.file),
         rightFileStart: { line: suggestion.startLine, offset: 1 },
         rightFileEnd: { line: suggestion.endLine, offset: 1 },
       },
@@ -1120,7 +1189,9 @@ async function createThread(
   gitApi?: IGitApi,
 ): Promise<void> {
   if (!options.project) {
-    throw new ReviewError("Azure DevOps project name is required to post comments.");
+    throw new ReviewError(
+      "Azure DevOps project name is required to post comments.",
+    );
   }
   if (!options.prId) {
     throw new ReviewError("Pull request ID is required to post comments.");
@@ -1135,15 +1206,25 @@ async function createThread(
     return;
   } catch (error) {
     const message = (error as Error).message;
-    logger.warn("Falling back to Azure DevOps client after REST failure: %s", message);
+    logger.warn(
+      "Falling back to Azure DevOps client after REST failure: %s",
+      message,
+    );
   }
 
   if (!gitApi) {
-    throw new ReviewError("Azure DevOps client unavailable; cannot post comments.");
+    throw new ReviewError(
+      "Azure DevOps client unavailable; cannot post comments.",
+    );
   }
 
   logger.info("Posting review thread to PR", options.prId);
-  await gitApi.createThread(thread, repositoryId, options.prId, options.project);
+  await gitApi.createThread(
+    thread,
+    repositoryId,
+    options.prId,
+    options.project,
+  );
 }
 
 async function createThreadViaRest(
@@ -1152,7 +1233,9 @@ async function createThreadViaRest(
   thread: GitInterfaces.GitPullRequestCommentThread,
 ): Promise<void> {
   if (!options.organization) {
-    throw new ReviewError("Azure DevOps organization URL is required. Pass --organization.");
+    throw new ReviewError(
+      "Azure DevOps organization URL is required. Pass --organization.",
+    );
   }
   if (!options.azureToken) {
     throw new ReviewError(
@@ -1161,7 +1244,9 @@ async function createThreadViaRest(
   }
   const project = options.project;
   if (!project) {
-    throw new ReviewError("Azure DevOps project name is required. Pass --project.");
+    throw new ReviewError(
+      "Azure DevOps project name is required. Pass --project.",
+    );
   }
 
   const orgUrl = resolveOrganizationUrl(options.organization);
@@ -1185,7 +1270,8 @@ async function createThreadViaRest(
   }
 
   const errorBody = (await response.text()).trim();
-  const truncatedError = errorBody.length > 500 ? `${errorBody.slice(0, 500)}…` : errorBody;
+  const truncatedError =
+    errorBody.length > 500 ? `${errorBody.slice(0, 500)}…` : errorBody;
   throw new ReviewError(
     `Azure DevOps REST create thread failed (${response.status} ${response.statusText})${
       truncatedError ? `: ${truncatedError}` : ""
@@ -1197,10 +1283,14 @@ async function ensureGitClient(
   options: CliOptions,
 ): Promise<{ gitApi: IGitApi; repositoryId: string }> {
   if (!options.organization) {
-    throw new ReviewError("Azure DevOps organization URL is required. Pass --organization.");
+    throw new ReviewError(
+      "Azure DevOps organization URL is required. Pass --organization.",
+    );
   }
   if (!options.project) {
-    throw new ReviewError("Azure DevOps project name is required. Pass --project.");
+    throw new ReviewError(
+      "Azure DevOps project name is required. Pass --project.",
+    );
   }
   const token = options.azureToken;
   if (!token) {
@@ -1219,16 +1309,23 @@ async function ensureGitClient(
   return { gitApi, repositoryId };
 }
 
-async function resolveRepositoryId(options: CliOptions, gitApi: IGitApi): Promise<string> {
+async function resolveRepositoryId(
+  options: CliOptions,
+  gitApi: IGitApi,
+): Promise<string> {
   if (options.repositoryId) {
     return options.repositoryId;
   }
   if (!options.repository) {
-    throw new ReviewError("Repository name or ID is required to post comments.");
+    throw new ReviewError(
+      "Repository name or ID is required to post comments.",
+    );
   }
   const repo = await gitApi.getRepository(options.repository, options.project);
   if (!repo?.id) {
-    throw new ReviewError(`Could not resolve repository ID for ${options.repository}`);
+    throw new ReviewError(
+      `Could not resolve repository ID for ${options.repository}`,
+    );
   }
   return repo.id;
 }
@@ -1238,7 +1335,10 @@ async function main(): Promise<void> {
   logger = createLogger(options.debug);
 
   if (options.debug) {
-    logger.debug("CLI options:", JSON.stringify(redactOptions(options), null, 2));
+    logger.debug(
+      "CLI options:",
+      JSON.stringify(redactOptions(options), null, 2),
+    );
   }
 
   const startTime = Date.now();
@@ -1246,7 +1346,11 @@ async function main(): Promise<void> {
   try {
     const diffText = await loadDiff(options);
     const fileDiffs = parseUnifiedDiff(diffText);
-    const truncated = truncateFiles(fileDiffs, options.maxFiles, options.maxDiffChars);
+    const truncated = truncateFiles(
+      fileDiffs,
+      options.maxFiles,
+      options.maxDiffChars,
+    );
     const prompt = buildPrompt(truncated);
     let rawJson: string;
     if (options.codexResponseFile) {
@@ -1279,12 +1383,15 @@ async function main(): Promise<void> {
       gitApi = client.gitApi;
       repositoryId = client.repositoryId;
     }
-    await postOverallComment(options, review, gitApi, repositoryId);
     await postSuggestions(options, review, gitApi, repositoryId);
+    await postOverallComment(options, review, gitApi, repositoryId);
     const elapsedMs = Date.now() - startTime;
-    logger.info(`Review completed successfully in ${formatElapsed(elapsedMs)}.`);
+    logger.info(
+      `Review completed successfully in ${formatElapsed(elapsedMs)}.`,
+    );
   } catch (error) {
-    const message = error instanceof ReviewError ? error.message : (error as Error).message;
+    const message =
+      error instanceof ReviewError ? error.message : (error as Error).message;
     logger.error("Review failed:", message);
     process.exitCode = 1;
   }

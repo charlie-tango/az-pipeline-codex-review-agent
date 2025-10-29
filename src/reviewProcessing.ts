@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-import { ReviewError } from "./errors";
-import { filterSuggestionsByIgnorePatterns, shouldIgnoreFile } from "./ignore";
-import { getLogger } from "./logging";
-import { ReviewSchema } from "./schemas";
-import type { Finding, ReviewResult, ReviewSuggestion } from "./types";
+import { ReviewError } from "./errors.js";
+import { filterSuggestionsByIgnorePatterns, shouldIgnoreFile } from "./ignore.js";
+import { getLogger } from "./logging.js";
+import { ReviewSchema } from "./schemas.js";
+import type { Finding, ReviewResult, ReviewSuggestion } from "./types.js";
 
 export function parseReview(rawJson: string): ReviewResult {
   let jsonPayload: unknown;

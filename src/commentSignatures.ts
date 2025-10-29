@@ -1,4 +1,4 @@
-import type { ReviewSuggestion } from "./types";
+import type { ReviewSuggestion } from "./types.js";
 
 export function normalizeThreadFilePath(file: string): string {
   const normalized = file.replace(/\\/g, "/").replace(/^\/+/, "");

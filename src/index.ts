@@ -4,20 +4,20 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { type CliOptions, parseArgs, redactOptions } from "./cli";
-import { callCodex } from "./codex";
+import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
+import { callCodex } from "./codex.js";
 import {
   ensureGitClient,
   fetchExistingCommentSignatures,
   type IGitApi,
-} from "./azure";
-import { loadDiff, parseUnifiedDiff, truncateFiles, buildPrompt } from "./git";
-import { createLogger, setLogger, getLogger } from "./logging";
-import { postOverallComment, postSuggestions } from "./commentPosting";
-import { filterReviewByIgnorePatterns, logReview, parseReview } from "./reviewProcessing";
-import { ReviewError } from "./errors";
-import { formatElapsed } from "./utils";
-import { filterFileDiffs } from "./ignore";
+} from "./azure.js";
+import { loadDiff, parseUnifiedDiff, truncateFiles, buildPrompt } from "./git.js";
+import { createLogger, setLogger, getLogger } from "./logging.js";
+import { postOverallComment, postSuggestions } from "./commentPosting.js";
+import { filterReviewByIgnorePatterns, logReview, parseReview } from "./reviewProcessing.js";
+import { ReviewError } from "./errors.js";
+import { formatElapsed } from "./utils.js";
+import { filterFileDiffs } from "./ignore.js";
 
 async function main(): Promise<void> {
   let options: CliOptions;
@@ -140,6 +140,7 @@ async function obtainReviewJson(
   return callCodex(prompt, {
     timeBudgetMinutes: options.reviewTimeBudget,
     apiKey: openaiApiKey,
+    instructionOverride: options.prompt,
   });
 }
 

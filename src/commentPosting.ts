@@ -4,18 +4,18 @@ import path from "node:path";
 import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
-import type { CliOptions } from "./cli";
+import type { CliOptions } from "./cli.js";
 import {
   buildCommentSignature,
   buildSuggestionSignaturePayload,
   normalizeThreadFilePath,
-} from "./commentSignatures";
-import { createThreadViaRest } from "./azure";
-import { ReviewError } from "./errors";
-import { getLogger } from "./logging";
-import { buildFindingsSummary } from "./reviewProcessing";
-import type { ReviewResult, ReviewSuggestion } from "./types";
-import { shouldIgnoreFile } from "./ignore";
+} from "./commentSignatures.js";
+import { createThreadViaRest } from "./azure.js";
+import { ReviewError } from "./errors.js";
+import { getLogger } from "./logging.js";
+import { buildFindingsSummary } from "./reviewProcessing.js";
+import type { ReviewResult, ReviewSuggestion } from "./types.js";
+import { shouldIgnoreFile } from "./ignore.js";
 
 export async function postOverallComment(
   options: CliOptions,

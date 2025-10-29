@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { normalizeJsonSchema } from "./utils";
+import { normalizeJsonSchema } from "./utils.js";
 
 export const integerFromString = z.coerce.number().int();
 

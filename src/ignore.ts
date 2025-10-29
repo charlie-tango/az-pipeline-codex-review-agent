@@ -1,6 +1,6 @@
 import micromatch from "micromatch";
 
-import type { FileDiff } from "./types";
+import type { FileDiff } from "./types.js";
 
 function normalizeFilePath(filePath: string): string {
   return filePath.replace(/\\/g, "/").replace(/^\.\//, "");

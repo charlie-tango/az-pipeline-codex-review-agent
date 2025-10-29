@@ -4,8 +4,8 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { z } from "zod";
 
-import { ReviewError } from "./errors";
-import { maskSecret } from "./utils";
+import { ReviewError } from "./errors.js";
+import { maskSecret } from "./utils.js";
 
 const integerFromString = z.coerce.number().int();
 
@@ -46,6 +46,7 @@ export const ArgsSchema = z.object({
   azureToken: z.string().trim().min(1, "azure-token cannot be empty").optional(),
   openaiApiKey: z.string().trim().min(1, "openai-api-key cannot be empty").optional(),
   ignoreFiles: z.array(z.string().trim().min(1)).optional().default([]),
+  prompt: z.string().trim().optional(),
 });
 
 export type CliOptions = z.infer<typeof ArgsSchema>;
@@ -65,6 +66,10 @@ export function parseArgs(): CliOptions {
       type: "number",
       description: "Azure DevOps pull request ID.",
       default: envInt("SYSTEM_PULLREQUEST_PULLREQUESTID"),
+    })
+    .option("prompt", {
+      type: "string",
+      description: "Override the default instruction shown to the review agent (use with caution).",
     })
     .option("organization", {
       type: "string",

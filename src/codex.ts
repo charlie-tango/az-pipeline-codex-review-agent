@@ -2,13 +2,13 @@ import process from "node:process";
 
 import { Codex } from "@openai/codex-sdk";
 
-import { CODEX_OUTPUT_SCHEMA } from "./schemas";
-import { ReviewError } from "./errors";
-import { getLogger } from "./logging";
+import { CODEX_OUTPUT_SCHEMA } from "./schemas.js";
+import { ReviewError } from "./errors.js";
+import { getLogger } from "./logging.js";
 
 export async function callCodex(
   prompt: string,
-  options: { timeBudgetMinutes?: number; apiKey?: string } = {},
+  options: { timeBudgetMinutes?: number; apiKey?: string; instructionOverride?: string } = {},
 ): Promise<string> {
   const logger = getLogger();
   const codexOptions = options.apiKey ? { apiKey: options.apiKey } : undefined;
@@ -23,7 +23,9 @@ export async function callCodex(
   const instructions = [
     {
       type: "text" as const,
-      text: "You are an autonomous code-review assistant focused on actionable feedback.",
+      text:
+        options.instructionOverride?.trim() ||
+        "You are an autonomous code-review assistant focused on actionable feedback.",
     },
   ];
 

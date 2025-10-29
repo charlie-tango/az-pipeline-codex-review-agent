@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { getLogger } from "./logging";
-import { ReviewError } from "./errors";
+import { getLogger } from "./logging.js";
+import { ReviewError } from "./errors.js";
 
 const execFileAsync = promisify(execFile);
 

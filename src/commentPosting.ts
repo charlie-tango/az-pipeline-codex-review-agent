@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
@@ -11,7 +14,7 @@ import { createThreadViaRest } from "./azure.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 import { buildFindingsSummary } from "./reviewProcessing.js";
-import type { ReviewResult } from "./types.js";
+import type { ReviewResult, ReviewSuggestion } from "./types.js";
 
 export async function postOverallComment(
   options: CliOptions,
@@ -111,9 +114,11 @@ export async function postSuggestions(
       }
     }
     contextLines.push(suggestion.comment);
+    const sanitizedReplacement = sanitizeSuggestionReplacement(suggestion);
+    const renderedReplacement = renderReplacementForSuggestion(sanitizedReplacement);
     const suggestionBlock = `${contextLines
       .filter((line) => line && line.trim().length > 0)
-      .join("\n\n")}\n\n\`\`\`suggestion\n${suggestion.replacement}\n\`\`\``;
+      .join("\n\n")}\n\n\`\`\`suggestion\n${renderedReplacement}\n\`\`\``;
 
     if (options.dryRun) {
       logger.info(
@@ -123,7 +128,10 @@ export async function postSuggestions(
     }
 
     const signature = buildCommentSignature(
-      buildSuggestionSignaturePayload(suggestion, suggestionBlock),
+      buildSuggestionSignaturePayload(
+        { ...suggestion, replacement: sanitizedReplacement },
+        suggestionBlock,
+      ),
     );
     if (signature && existingCommentSignatures?.has(signature)) {
       logger.info(
@@ -188,4 +196,61 @@ async function createThread(
 
   getLogger().info("Posting review thread to PR", options.prId);
   await gitApi.createThread(thread, repositoryId, options.prId, options.project);
+}
+
+function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): string {
+  let normalized = normalizeLineEndings(suggestion.replacement).replace(/\s+$/u, "");
+  if (!normalized) {
+    return normalized;
+  }
+
+  const originalSegment = readOriginalSegment(
+    suggestion.file,
+    suggestion.startLine,
+    suggestion.endLine,
+  );
+  if (!originalSegment) {
+    return normalized;
+  }
+
+  const trimmedOriginal = normalizeLineEndings(originalSegment).trim();
+  if (!trimmedOriginal) {
+    return normalized;
+  }
+
+  const pattern = new RegExp(`${escapeForRegex(trimmedOriginal)}\\s*$`, "u");
+  if (pattern.test(normalized)) {
+    const candidate = normalized.replace(pattern, "").trimEnd();
+    if (candidate.length > 0) {
+      normalized = candidate;
+    }
+  }
+
+  return normalized;
+}
+
+function renderReplacementForSuggestion(replacement: string): string {
+  const normalized = normalizeLineEndings(replacement);
+  return normalized.replace(/\n/g, "\r\n");
+}
+
+function normalizeLineEndings(content: string): string {
+  return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function readOriginalSegment(file: string, startLine: number, endLine: number): string | undefined {
+  const absolute = path.resolve(file);
+  if (!existsSync(absolute)) {
+    return undefined;
+  }
+  const content = readFileSync(absolute, "utf8");
+  const lines = content.split(/\r?\n/);
+  if (startLine < 1 || endLine < startLine || startLine > lines.length) {
+    return undefined;
+  }
+  return lines.slice(startLine - 1, Math.min(endLine, lines.length)).join("\n");
+}
+
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

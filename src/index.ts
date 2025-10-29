@@ -11,7 +11,12 @@ import {
   fetchExistingCommentSignatures,
   type IGitApi,
 } from "./azure.js";
-import { loadDiff, parseUnifiedDiff, truncateFiles, buildPrompt } from "./git.js";
+import {
+  loadDiff,
+  parseUnifiedDiff,
+  truncateFiles,
+  buildPrompt,
+} from "./git.js";
 import { createLogger, setLogger, getLogger } from "./logging.js";
 import { postOverallComment, postSuggestions } from "./commentPosting.js";
 import { parseReview, logReview } from "./reviewProcessing.js";
@@ -23,7 +28,8 @@ async function main(): Promise<void> {
   try {
     options = parseArgs();
   } catch (error) {
-    const message = error instanceof ReviewError ? error.message : (error as Error).message;
+    const message =
+      error instanceof ReviewError ? error.message : (error as Error).message;
     console.error("[ERROR]", message);
     process.exitCode = 1;
     return;
@@ -33,7 +39,10 @@ async function main(): Promise<void> {
   setLogger(logger);
 
   if (options.debug) {
-    logger.debug("CLI options:", JSON.stringify(redactOptions(options), null, 2));
+    logger.debug(
+      "CLI options:",
+      JSON.stringify(redactOptions(options), null, 2),
+    );
   }
 
   const startTime = Date.now();
@@ -41,7 +50,11 @@ async function main(): Promise<void> {
   try {
     const diffText = await loadDiff(options);
     const fileDiffs = parseUnifiedDiff(diffText);
-    const truncated = truncateFiles(fileDiffs, options.maxFiles, options.maxDiffChars);
+    const truncated = truncateFiles(
+      fileDiffs,
+      options.maxFiles,
+      options.maxDiffChars,
+    );
     const prompt = buildPrompt(truncated);
 
     const rawJson = await obtainReviewJson(prompt, options);
@@ -69,19 +82,37 @@ async function main(): Promise<void> {
       );
     }
 
-    await postSuggestions(options, review, gitApi, repositoryId, existingCommentSignatures);
-    await postOverallComment(options, review, gitApi, repositoryId, existingCommentSignatures);
+    await postSuggestions(
+      options,
+      review,
+      gitApi,
+      repositoryId,
+      existingCommentSignatures,
+    );
+    await postOverallComment(
+      options,
+      review,
+      gitApi,
+      repositoryId,
+      existingCommentSignatures,
+    );
 
     const elapsedMs = Date.now() - startTime;
-    logger.info(`Review completed successfully in ${formatElapsed(elapsedMs)}.`);
+    logger.info(
+      `Review completed successfully in ${formatElapsed(elapsedMs)}.`,
+    );
   } catch (error) {
-    const message = error instanceof ReviewError ? error.message : (error as Error).message;
+    const message =
+      error instanceof ReviewError ? error.message : (error as Error).message;
     logger.error("Review failed:", message);
     process.exitCode = 1;
   }
 }
 
-async function obtainReviewJson(prompt: string, options: CliOptions): Promise<string> {
+async function obtainReviewJson(
+  prompt: string,
+  options: CliOptions,
+): Promise<string> {
   const logger = getLogger();
 
   if (options.codexResponseFile) {
@@ -92,7 +123,9 @@ async function obtainReviewJson(prompt: string, options: CliOptions): Promise<st
 
   const openaiApiKey = options.openaiApiKey ?? process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
-    throw new ReviewError("OpenAI API key not provided. Set OPENAI_API_KEY or pass --openai-api-key.");
+    throw new ReviewError(
+      "OpenAI API key not provided. Set OPENAI_API_KEY or pass --openai-api-key.",
+    );
   }
 
   return callCodex(prompt, {

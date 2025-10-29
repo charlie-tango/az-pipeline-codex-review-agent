@@ -33,10 +33,7 @@ export async function callCodex(
     },
   ];
 
-  if (
-    typeof options.timeBudgetMinutes === "number" &&
-    options.timeBudgetMinutes > 0
-  ) {
+  if (typeof options.timeBudgetMinutes === "number" && options.timeBudgetMinutes > 0) {
     instructions.push({
       type: "text" as const,
       text: `Work efficiently and limit your analysis to what you can cover in at most ${options.timeBudgetMinutes} minutes; prioritize the most important issues first.`,
@@ -54,10 +51,7 @@ export async function callCodex(
     },
   );
 
-  logger.debug(
-    "Codex Prompt:",
-    instructions.map((instruction) => instruction.text).join("\n"),
-  );
+  logger.debug("Codex Prompt:", instructions.map((instruction) => instruction.text).join("\n"));
 
   const turn = await thread.run(instructions, {
     outputSchema: CODEX_OUTPUT_SCHEMA,

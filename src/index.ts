@@ -262,7 +262,7 @@ function buildExistingFeedbackContext(
   }
 
   return [
-    "Existing PR feedback already posted, MUST NOT report issue that are already covered by existing feedback:",
+    "Existing PR feedback already posted, MUST NOT report issues that are already covered by existing feedback, if there is no suggestion or finding then don't post at all:",
     ...lines,
   ].join("\n");
 }

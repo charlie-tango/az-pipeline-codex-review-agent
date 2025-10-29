@@ -21,7 +21,6 @@ export const SuggestionInstructionSchema = z.object({
 });
 
 export const FindingInstructionSchema = z.object({
-  severity: z.string(),
   file: z.string(),
   line: z.number().int(),
   title: z.string(),
@@ -37,12 +36,14 @@ export const CodexInstructionSchema = z.object({
 
 export const FindingSchema = z
   .object({
-    severity: z.string().optional(),
     file: z.string().optional(),
     line: integerFromString.optional(),
     title: z.string().optional(),
     details: z.string().optional(),
-    suggestion: z.union([SuggestionDetailsSchema, z.null()]).optional().default(null),
+    suggestion: z
+      .union([SuggestionDetailsSchema, z.null()])
+      .optional()
+      .default(null),
   })
   .passthrough();
 
@@ -65,3 +66,4 @@ export const CODEX_OUTPUT_SCHEMA = normalizeJsonSchema(
     target: "openapi-3.0",
   }) as Record<string, unknown>,
 );
+

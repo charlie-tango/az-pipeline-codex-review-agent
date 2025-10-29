@@ -26,12 +26,20 @@ export async function postOverallComment(
 ): Promise<void> {
   const logger = getLogger();
   if (!options.prId) {
-    logger.info("No pull request ID detected; skipping overall review comment.");
+    logger.info(
+      "No pull request ID detected; skipping overall review comment.",
+    );
     return;
   }
-  const contentLines: string[] = [review.summary || "Automated review completed."];
+  const contentLines: string[] = [
+    review.summary || "Automated review completed.",
+  ];
   if (review.findings.length > 0) {
-    contentLines.push("", "### Findings", ...buildFindingsSummary(review.findings));
+    contentLines.push(
+      "",
+      "### Findings",
+      ...buildFindingsSummary(review.findings),
+    );
   }
   const commentText = contentLines.join("\n").trim();
 
@@ -78,7 +86,9 @@ export async function postSuggestions(
 ): Promise<void> {
   const logger = getLogger();
   if (!options.prId) {
-    logger.info("No pull request ID detected; skipping inline suggestion threads.");
+    logger.info(
+      "No pull request ID detected; skipping inline suggestion threads.",
+    );
     return;
   }
   if (review.suggestions.length === 0) {
@@ -96,21 +106,14 @@ export async function postSuggestions(
 
   for (const suggestion of review.suggestions) {
     if (shouldIgnoreFile(suggestion.file, options.ignoreFiles)) {
-      logger.debug(
-        "Skipping suggestion for ignored file %s",
-        suggestion.file,
-      );
+      logger.debug("Skipping suggestion for ignored file %s", suggestion.file);
       continue;
     }
     const contextLines: string[] = [];
     if (suggestion.originFinding) {
-      const severity = suggestion.originFinding.severity;
       const title = suggestion.originFinding.title;
       const details = suggestion.originFinding.details;
       const headerParts = [];
-      if (severity) {
-        headerParts.push(`**${severity.toUpperCase()}**`);
-      }
       if (title) {
         headerParts.push(title);
       }
@@ -123,7 +126,8 @@ export async function postSuggestions(
     }
     contextLines.push(suggestion.comment);
     const sanitizedReplacement = sanitizeSuggestionReplacement(suggestion);
-    const renderedReplacement = renderReplacementForSuggestion(sanitizedReplacement);
+    const renderedReplacement =
+      renderReplacementForSuggestion(sanitizedReplacement);
     const suggestionBlock = `${contextLines
       .filter((line) => line && line.trim().length > 0)
       .join("\n\n")}\n\n\`\`\`suggestion\n${renderedReplacement}\n\`\`\``;
@@ -180,7 +184,9 @@ async function createThread(
   gitApi?: IGitApi,
 ): Promise<void> {
   if (!options.project) {
-    throw new ReviewError("Azure DevOps project name is required to post comments.");
+    throw new ReviewError(
+      "Azure DevOps project name is required to post comments.",
+    );
   }
   if (!options.prId) {
     throw new ReviewError("Pull request ID is required to post comments.");
@@ -195,19 +201,32 @@ async function createThread(
     return;
   } catch (error) {
     const message = (error as Error).message;
-    getLogger().warn("Falling back to Azure DevOps client after REST failure: %s", message);
+    getLogger().warn(
+      "Falling back to Azure DevOps client after REST failure: %s",
+      message,
+    );
   }
 
   if (!gitApi) {
-    throw new ReviewError("Azure DevOps client unavailable; cannot post comments.");
+    throw new ReviewError(
+      "Azure DevOps client unavailable; cannot post comments.",
+    );
   }
 
   getLogger().info("Posting review thread to PR", options.prId);
-  await gitApi.createThread(thread, repositoryId, options.prId, options.project);
+  await gitApi.createThread(
+    thread,
+    repositoryId,
+    options.prId,
+    options.project,
+  );
 }
 
 function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): string {
-  let normalized = normalizeLineEndings(suggestion.replacement).replace(/\s+$/u, "");
+  let normalized = normalizeLineEndings(suggestion.replacement).replace(
+    /\s+$/u,
+    "",
+  );
   if (!normalized) {
     return normalized;
   }
@@ -246,7 +265,11 @@ function normalizeLineEndings(content: string): string {
   return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
-function readOriginalSegment(file: string, startLine: number, endLine: number): string | undefined {
+function readOriginalSegment(
+  file: string,
+  startLine: number,
+  endLine: number,
+): string | undefined {
   const absolute = path.resolve(file);
   if (!existsSync(absolute)) {
     return undefined;
@@ -262,3 +285,4 @@ function readOriginalSegment(file: string, startLine: number, endLine: number): 
 function escapeForRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+

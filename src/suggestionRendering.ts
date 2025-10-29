@@ -49,7 +49,11 @@ export function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): str
     return normalized;
   }
 
-  const originalSegment = readOriginalSegment(suggestion.file, suggestion.startLine, suggestion.endLine);
+  const originalSegment = readOriginalSegment(
+    suggestion.file,
+    suggestion.startLine,
+    suggestion.endLine,
+  );
   if (!originalSegment) {
     return normalized;
   }

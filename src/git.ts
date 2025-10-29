@@ -26,12 +26,57 @@ export type LoadedDiff = {
 export async function loadDiff(options: CliOptions, sinceCommit?: string): Promise<LoadedDiff> {
   const logger = getLogger();
 
-  const diffFromFile = tryLoadDiffFromFile(options, logger);
-  if (diffFromFile) {
-    return diffFromFile;
+  if (options.diffFile) {
+    const diffPath = path.resolve(options.diffFile);
+    logger.info("Loading diff from", diffPath);
+    if (!existsSync(diffPath)) {
+      throw new ReviewError(`Diff file not found: ${diffPath}`);
+    }
+    const diffText = readFileSync(diffPath, "utf8");
+    return {
+      diffText,
+      sourceRef: "local-diff",
+      sourceSha: "local-diff",
+      targetRef: "local-diff",
+      targetSha: "local-diff",
+      comparisonDescription: "local diff file",
+    };
   }
 
-  const { targetBranch, errors } = await resolveTargetBranchWithFallbacks(options, logger);
+  let targetBranch = options.targetBranch;
+  const errors: string[] = [];
+
+  if (options.prId && !targetBranch) {
+    try {
+      const resolved = await resolvePullRequestTargetBranch(options);
+      if (resolved) {
+        targetBranch = resolved;
+        logger.info(
+          "Resolved target branch %s from Azure DevOps for PR #%s",
+          targetBranch,
+          options.prId,
+        );
+      }
+    } catch (error) {
+      const message = (error as Error).message;
+      logger.warn("Failed to resolve target branch from Azure DevOps: %s", message);
+      errors.push(message);
+    }
+  }
+
+  if (!targetBranch) {
+    try {
+      const inferred = await inferTargetBranch(options);
+      if (inferred) {
+        targetBranch = inferred;
+        logger.info("Inferred target branch from repository default: %s", targetBranch);
+      }
+    } catch (error) {
+      const message = (error as Error).message;
+      logger.warn("Failed to infer target branch from repository: %s", message);
+      errors.push(message);
+    }
+  }
 
   if (targetBranch) {
     try {
@@ -467,67 +512,4 @@ export function truncateFiles(files: FileDiff[], maxFiles: number, maxChars: num
 export function buildPrompt(files: FileDiff[]): string {
   const sections = files.map((file) => `File: ${file.path}\n\`\`\`\n${file.diff}\n\`\`\``);
   return sections.join("\n\n");
-}
-
-function tryLoadDiffFromFile(options: CliOptions, logger: ReturnType<typeof getLogger>): LoadedDiff | null {
-  if (!options.diffFile) {
-    return null;
-  }
-
-  const diffPath = path.resolve(options.diffFile);
-  logger.info("Loading diff from", diffPath);
-  if (!existsSync(diffPath)) {
-    throw new ReviewError(`Diff file not found: ${diffPath}`);
-  }
-  const diffText = readFileSync(diffPath, "utf8");
-  return {
-    diffText,
-    sourceRef: "local-diff",
-    sourceSha: "local-diff",
-    targetRef: "local-diff",
-    targetSha: "local-diff",
-    comparisonDescription: "local diff file",
-  };
-}
-
-async function resolveTargetBranchWithFallbacks(
-  options: CliOptions,
-  logger: ReturnType<typeof getLogger>,
-): Promise<{ targetBranch?: string; errors: string[] }> {
-  const errors: string[] = [];
-  let targetBranch = options.targetBranch;
-
-  if (options.prId && !targetBranch) {
-    try {
-      const resolved = await resolvePullRequestTargetBranch(options);
-      if (resolved) {
-        targetBranch = resolved;
-        logger.info(
-          "Resolved target branch %s from Azure DevOps for PR #%s",
-          targetBranch,
-          options.prId,
-        );
-      }
-    } catch (error) {
-      const message = (error as Error).message;
-      logger.warn("Failed to resolve target branch from Azure DevOps: %s", message);
-      errors.push(message);
-    }
-  }
-
-  if (!targetBranch) {
-    try {
-      const inferred = await inferTargetBranch(options);
-      if (inferred) {
-        targetBranch = inferred;
-        logger.info("Inferred target branch from repository default: %s", targetBranch);
-      }
-    } catch (error) {
-      const message = (error as Error).message;
-      logger.warn("Failed to infer target branch from repository: %s", message);
-      errors.push(message);
-    }
-  }
-
-  return { targetBranch, errors };
 }

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 
-import { renderSuggestionComment, sanitizeSuggestionReplacement } from "../src/suggestionRendering.js";
+import {
+  renderSuggestionComment,
+  sanitizeSuggestionReplacement,
+} from "../src/suggestionRendering.js";
 
 const fixturePath = path.join("tests", "fixtures", "sample.ts");
 

@@ -200,7 +200,10 @@ type RestThread = {
 };
 
 export class AzureThreadService {
-  constructor(private readonly options: CliOptions, private readonly gitApi?: IGitApi) {}
+  constructor(
+    private readonly options: CliOptions,
+    private readonly gitApi?: IGitApi,
+  ) {}
 
   async fetchExisting(
     repositoryId?: string,
@@ -231,7 +234,10 @@ export class AzureThreadService {
       return null;
     }
     try {
-      return await this.gitApi.getThreads(repositoryId, this.options.prId!, this.options.project);
+      if (!this.options.prId) {
+        throw new ReviewError("Pull request ID is required to fetch existing threads.");
+      }
+      return await this.gitApi.getThreads(repositoryId, this.options.prId, this.options.project);
     } catch (error) {
       getLogger().warn(
         "Failed to fetch existing threads via Azure DevOps client: %s",

@@ -119,7 +119,7 @@ export async function postSuggestions(
       }
     }
     contextLines.push(suggestion.comment);
-    const sanitizedReplacement = sanitizeSuggestionReplacement(suggestion);
+    const sanitizedReplacement = normalizeLineEndings(suggestion.replacement).trimEnd();
     const renderedReplacement = renderReplacementForSuggestion(sanitizedReplacement);
     const suggestionBlock = `${contextLines
       .filter((line) => line && line.trim().length > 0)

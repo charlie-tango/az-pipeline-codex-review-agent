@@ -13,7 +13,9 @@
   "engines": {
     "node": ">=20"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "pnpm exec tsx src/index.ts --diff-file mocks/sample.diff --dry-run --debug",
@@ -49,7 +51,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "lint-staged": {
-    "*": "pnpm exec biome lint --staged --write --no-errors-on-unmatched"
+    "*": "pnpm exec biome format --staged --write --no-errors-on-unmatched && pnpm exec biome lint --staged --write --no-errors-on-unmatched"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged"

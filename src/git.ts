@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { ensureGitClient, resolveOrganizationUrl } from "./azure.js";
 import type { CliOptions } from "./cli.js";
 import { runCommand } from "./command.js";
-import { ensureGitClient, resolveOrganizationUrl } from "./azure.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 import type { FileDiff } from "./types.js";

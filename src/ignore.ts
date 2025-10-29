@@ -29,10 +29,9 @@ export function filterDiffsByIgnorePatterns<T extends { path: string }>(
   return diffs.filter((diff) => !shouldIgnoreFile(diff.path, patterns));
 }
 
-export function filterReviewFiles<T extends { file?: string; suggestion?: { file?: string } | null }>(
-  items: readonly T[],
-  patterns: readonly string[] | undefined,
-): T[] {
+export function filterReviewFiles<
+  T extends { file?: string; suggestion?: { file?: string } | null },
+>(items: readonly T[], patterns: readonly string[] | undefined): T[] {
   if (!patterns || patterns.length === 0) {
     return [...items];
   }

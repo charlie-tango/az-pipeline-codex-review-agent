@@ -2,9 +2,9 @@ import process from "node:process";
 
 import { Codex } from "@openai/codex-sdk";
 
-import { CODEX_OUTPUT_SCHEMA } from "./schemas.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
+import { CODEX_OUTPUT_SCHEMA } from "./schemas.js";
 
 export async function callCodex(
   prompt: string,

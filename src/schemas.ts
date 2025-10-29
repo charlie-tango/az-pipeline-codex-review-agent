@@ -40,10 +40,7 @@ export const FindingSchema = z
     line: integerFromString.optional(),
     title: z.string().optional(),
     details: z.string().optional(),
-    suggestion: z
-      .union([SuggestionDetailsSchema, z.null()])
-      .optional()
-      .default(null),
+    suggestion: z.union([SuggestionDetailsSchema, z.null()]).optional().default(null),
   })
   .passthrough();
 
@@ -66,4 +63,3 @@ export const CODEX_OUTPUT_SCHEMA = normalizeJsonSchema(
     target: "openapi-3.0",
   }) as Record<string, unknown>,
 );
-

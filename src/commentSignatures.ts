@@ -19,16 +19,12 @@ export function buildCommentSignature({
   if (!content) {
     return undefined;
   }
-  const normalizedContent = content
-    .replace(/\r\n/g, "\n")
-    .replace(/\s+$/u, "")
-    .trim();
+  const normalizedContent = content.replace(/\r\n/g, "\n").replace(/\s+$/u, "").trim();
   if (normalizedContent.length === 0) {
     return undefined;
   }
   const normalizedPath = filePath ? normalizeThreadFilePath(filePath) : "";
-  const start =
-    typeof startLine === "number" && Number.isFinite(startLine) ? startLine : 0;
+  const start = typeof startLine === "number" && Number.isFinite(startLine) ? startLine : 0;
   const end =
     typeof endLine === "number" && Number.isFinite(endLine)
       ? endLine

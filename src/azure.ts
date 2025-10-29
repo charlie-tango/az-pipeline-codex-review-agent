@@ -83,6 +83,15 @@ function isTextCommentType(value: unknown): boolean {
   return false;
 }
 
+export type ExistingCommentSummary = {
+  content: string;
+  filePath?: string;
+  startLine?: number;
+  endLine?: number;
+  threadId?: number;
+  commentId?: number;
+};
+
 function recordThreadSignatures(
   thread:
     | GitInterfaces.GitPullRequestCommentThread
@@ -97,6 +106,7 @@ function recordThreadSignatures(
         };
       },
   signatures: Set<string>,
+  summaries?: ExistingCommentSummary[],
 ): void {
   const context = thread.threadContext;
   const filePath = context?.filePath ?? undefined;
@@ -113,9 +123,10 @@ function recordThreadSignatures(
     context?.leftFileStart?.line ??
     undefined;
 
+  let summaryCaptured = false;
+
   for (const comment of thread.comments ?? []) {
-    const content =
-      typeof comment.content === "string" ? comment.content : undefined;
+    const content = typeof comment.content === "string" ? comment.content : undefined;
     if (!content) {
       continue;
     }
@@ -134,6 +145,25 @@ function recordThreadSignatures(
     });
     if (signature) {
       signatures.add(signature);
+      if (!summaryCaptured && summaries) {
+        const threadId =
+          "id" in (thread as GitInterfaces.GitPullRequestCommentThread)
+            ? (thread as GitInterfaces.GitPullRequestCommentThread).id
+            : undefined;
+        const commentId =
+          "id" in comment && typeof (comment as { id?: number }).id === "number"
+            ? (comment as { id?: number }).id
+            : undefined;
+        summaries.push({
+          content,
+          filePath: filePath ?? undefined,
+          startLine: startLine ?? undefined,
+          endLine: endLine ?? undefined,
+          threadId,
+          commentId,
+        });
+        summaryCaptured = true;
+      }
     }
   }
 }
@@ -152,7 +182,7 @@ type RestThread = {
 async function fetchExistingCommentSignaturesViaRest(
   options: CliOptions,
   repositoryId: string,
-): Promise<Set<string>> {
+): Promise<{ signatures: Set<string>; summaries: ExistingCommentSummary[] }> {
   const token = options.azureToken;
   if (!token) {
     throw new ReviewError(
@@ -186,30 +216,32 @@ async function fetchExistingCommentSignaturesViaRest(
       : [];
 
   const signatures = new Set<string>();
+  const summaries: ExistingCommentSummary[] = [];
   for (const thread of threads) {
-    recordThreadSignatures(thread, signatures);
+    recordThreadSignatures(thread, signatures, summaries);
   }
-  return signatures;
+  return { signatures, summaries };
 }
 
 export async function fetchExistingCommentSignatures(
   options: CliOptions,
   repositoryId?: string,
   gitApi?: IGitApi,
-): Promise<Set<string>> {
+): Promise<{ signatures: Set<string>; summaries: ExistingCommentSummary[] }> {
   const logger = getLogger();
   const signatures = new Set<string>();
+  const summaries: ExistingCommentSummary[] = [];
   if (!options.prId || !repositoryId) {
-    return signatures;
+    return { signatures, summaries };
   }
 
   if (gitApi) {
     try {
       const threads = await gitApi.getThreads(repositoryId, options.prId, options.project);
       for (const thread of threads ?? []) {
-        recordThreadSignatures(thread, signatures);
+        recordThreadSignatures(thread, signatures, summaries);
       }
-      return signatures;
+      return { signatures, summaries };
     } catch (error) {
       logger.warn(
         "Failed to fetch existing threads via Azure DevOps client: %s",
@@ -219,18 +251,16 @@ export async function fetchExistingCommentSignatures(
   }
 
   try {
-    const restSignatures = await fetchExistingCommentSignaturesViaRest(options, repositoryId);
-    for (const signature of restSignatures) {
+    const restResult = await fetchExistingCommentSignaturesViaRest(options, repositoryId);
+    for (const signature of restResult.signatures) {
       signatures.add(signature);
     }
+    summaries.push(...restResult.summaries);
   } catch (error) {
-    logger.warn(
-      "Failed to fetch existing threads via REST API: %s",
-      (error as Error).message,
-    );
+    logger.warn("Failed to fetch existing threads via REST API: %s", (error as Error).message);
   }
 
-  return signatures;
+  return { signatures, summaries };
 }
 
 export async function createThreadViaRest(

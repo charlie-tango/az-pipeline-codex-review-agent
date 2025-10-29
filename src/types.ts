@@ -36,4 +36,3 @@ export interface ReviewResult {
   findings: Finding[];
   suggestions: ReviewSuggestion[];
 }
-

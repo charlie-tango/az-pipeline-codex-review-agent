@@ -1,10 +1,7 @@
 import { z } from "zod";
 
 import { ReviewError } from "./errors.js";
-import {
-  filterSuggestionsByIgnorePatterns,
-  shouldIgnoreFile,
-} from "./ignore.js";
+import { filterSuggestionsByIgnorePatterns, shouldIgnoreFile } from "./ignore.js";
 import { getLogger } from "./logging.js";
 import { ReviewSchema } from "./schemas.js";
 import type { Finding, ReviewResult, ReviewSuggestion } from "./types.js";
@@ -129,10 +126,7 @@ export function buildFindingsSummary(findings: Finding[]): string[] {
     const lineNumber = finding.line ?? finding.suggestion?.start_line ?? "?";
     const title = finding.title ?? "";
     const details = finding.details ?? "";
-    const headerParts = [
-      `-  ${filePath}:${lineNumber}`,
-      title ? `– ${title}` : "",
-    ].filter(Boolean);
+    const headerParts = [`-  ${filePath}:${lineNumber}`, title ? `– ${title}` : ""].filter(Boolean);
     const detailLines = [details]
       .filter((value) => value && value.trim().length > 0)
       .map((value) => `  ${value}`);
@@ -186,10 +180,7 @@ export function filterReviewByIgnorePatterns(
     return review;
   }
 
-  const filteredSuggestions = filterSuggestionsByIgnorePatterns(
-    review.suggestions,
-    patterns,
-  );
+  const filteredSuggestions = filterSuggestionsByIgnorePatterns(review.suggestions, patterns);
   const suggestionKeys = new Set(
     filteredSuggestions.map(
       (suggestion) =>
@@ -212,9 +203,7 @@ export function filterReviewByIgnorePatterns(
       const suggestionKey = finding.suggestion
         ? `${finding.suggestion.file ?? finding.file ?? ""}:${finding.suggestion.start_line}:${finding.suggestion.end_line ?? finding.suggestion.start_line}:${finding.suggestion.comment}:${finding.suggestion.replacement}`
         : "";
-      const matchesExisting = suggestionKey
-        ? suggestionKeys.has(suggestionKey)
-        : false;
+      const matchesExisting = suggestionKey ? suggestionKeys.has(suggestionKey) : false;
       if (!matchesExisting) {
         return { ...finding, suggestion: null };
       }
@@ -227,4 +216,3 @@ export function filterReviewByIgnorePatterns(
     suggestions: filteredSuggestions,
   };
 }
-

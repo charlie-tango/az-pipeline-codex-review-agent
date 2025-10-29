@@ -9,7 +9,20 @@ import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 import type { FileDiff } from "./types.js";
 
-export async function loadDiff(options: CliOptions): Promise<string> {
+export type LoadedDiff = {
+  diffText: string;
+  sourceRef: string;
+  sourceSha: string;
+  targetRef: string;
+  targetSha: string;
+  baseSha?: string;
+  comparisonDescription: string;
+};
+
+export async function loadDiff(
+  options: CliOptions,
+  sinceCommit?: string,
+): Promise<LoadedDiff> {
   const logger = getLogger();
   if (options.diffFile) {
     const diffPath = path.resolve(options.diffFile);
@@ -17,7 +30,15 @@ export async function loadDiff(options: CliOptions): Promise<string> {
     if (!existsSync(diffPath)) {
       throw new ReviewError(`Diff file not found: ${diffPath}`);
     }
-    return readFileSync(diffPath, "utf8");
+    const diffText = readFileSync(diffPath, "utf8");
+    return {
+      diffText,
+      sourceRef: "local-diff",
+      sourceSha: "local-diff",
+      targetRef: "local-diff",
+      targetSha: "local-diff",
+      comparisonDescription: "local diff file",
+    };
   }
 
   let targetBranch = options.targetBranch;
@@ -57,7 +78,7 @@ export async function loadDiff(options: CliOptions): Promise<string> {
 
   if (targetBranch) {
     try {
-      return await gitDiff({ ...options, targetBranch });
+      return await gitDiff({ ...options, targetBranch }, sinceCommit);
     } catch (error) {
       const message = (error as Error).message;
       logger.warn("git diff failed: %s", message);
@@ -329,7 +350,11 @@ async function refExists(ref: string): Promise<boolean> {
   }
 }
 
-async function gitDiff(options: CliOptions): Promise<string> {
+async function gitDiff(
+  options: CliOptions,
+  sinceCommit?: string,
+): Promise<LoadedDiff> {
+  const logger = getLogger();
   const targetBranch = options.targetBranch ?? "";
   const branchName = targetBranch.startsWith("refs/heads/")
     ? targetBranch.slice("refs/heads/".length)
@@ -339,13 +364,55 @@ async function gitDiff(options: CliOptions): Promise<string> {
   await runCommand(["git", "fetch", "origin", branchName], {
     allowFailure: false,
   });
+
+  const targetSha = (await runCommand(["git", "rev-parse", fetchRef])).trim();
   const sourceRef = await resolveSourceRef(options);
-  getLogger().info("Computing git diff", `${fetchRef}...${sourceRef}`);
-  const diff = await runCommand(["git", "diff", "--unified=3", `${fetchRef}...${sourceRef}`]);
-  if (!diff.trim()) {
-    getLogger().warn("git diff returned no changes.");
+  const sourceSha = (await runCommand(["git", "rev-parse", sourceRef])).trim();
+
+  let diffText = "";
+  let comparisonDescription = "";
+  let baseSha: string | undefined;
+
+  if (sinceCommit) {
+    const trimmed = sinceCommit.trim();
+    if (trimmed.length > 0 && trimmed !== sourceSha && (await refExists(trimmed))) {
+      baseSha = (await runCommand(["git", "rev-parse", trimmed])).trim();
+      comparisonDescription = `${baseSha}...${sourceSha}`;
+      logger.info(
+        "Computing incremental git diff %s...%s",
+        baseSha.slice(0, 12),
+        sourceSha.slice(0, 12),
+      );
+      diffText = await runCommand(["git", "diff", "--unified=3", comparisonDescription]);
+    } else if (trimmed.length > 0 && trimmed !== sourceSha) {
+      logger.warn(
+        "Previous review commit %s not found locally; falling back to full diff.",
+        trimmed,
+      );
+    }
   }
-  return diff;
+
+  if (!comparisonDescription) {
+    comparisonDescription = `${fetchRef}...${sourceRef}`;
+    logger.info("Computing git diff %s", comparisonDescription);
+    diffText = await runCommand(["git", "diff", "--unified=3", comparisonDescription]);
+  } else if (!diffText.trim()) {
+    logger.info("No changes detected since %s; skipping incremental diff.", baseSha);
+  }
+
+  if (!diffText.trim()) {
+    logger.info("git diff returned no changes.");
+  }
+
+  return {
+    diffText,
+    sourceRef,
+    sourceSha,
+    targetRef: fetchRef,
+    targetSha,
+    baseSha,
+    comparisonDescription,
+  };
 }
 
 export function parseUnifiedDiff(diffText: string): FileDiff[] {

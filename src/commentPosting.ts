@@ -23,6 +23,7 @@ export async function postOverallComment(
   gitApi?: IGitApi,
   repositoryId?: string,
   existingCommentSignatures?: Set<string>,
+  reviewedSourceSha?: string,
 ): Promise<void> {
   const logger = getLogger();
   if (!options.prId) {
@@ -34,9 +35,12 @@ export async function postOverallComment(
     contentLines.push("", "### Findings", ...buildFindingsSummary(review.findings));
   }
   const commentText = contentLines.join("\n").trim();
+  const finalCommentText = reviewedSourceSha
+    ? `${commentText}\n\n<!-- codex-review-head: ${reviewedSourceSha} -->`
+    : commentText;
 
   if (options.dryRun) {
-    logger.info("Dry-run: overall review comment would be:\n", commentText);
+    logger.info("Dry-run: overall review comment would be:\n", finalCommentText);
     return;
   }
   const resolvedRepositoryId = repositoryId ?? options.repositoryId;
@@ -57,7 +61,7 @@ export async function postOverallComment(
     status: GitInterfaces.CommentThreadStatus.Active,
     comments: [
       {
-        content: commentText,
+        content: finalCommentText,
         commentType: GitInterfaces.CommentType.Text,
       },
     ],
@@ -225,6 +229,27 @@ function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): string {
     if (candidate.length > 0) {
       normalized = candidate;
     }
+  }
+
+  const originalLines = normalizeLineEndings(trimmedOriginal)
+    .split("\n")
+    .map((line) => line.trimEnd());
+  const sanitizedLines = normalizeLineEndings(normalized).split("\n");
+  const filteredLines = sanitizedLines.filter((line) => {
+    const trimmed = line.trimEnd();
+    if (trimmed.length === 0) {
+      return false;
+    }
+    return !originalLines.some((originalLine) => originalLine === trimmed);
+  });
+  const dedupedLines: string[] = [];
+  for (const line of filteredLines) {
+    if (dedupedLines.length === 0 || dedupedLines[dedupedLines.length - 1] !== line) {
+      dedupedLines.push(line);
+    }
+  }
+  if (dedupedLines.length > 0) {
+    normalized = dedupedLines.join("\n").replace(/\s+$/u, "");
   }
 
   return normalized;

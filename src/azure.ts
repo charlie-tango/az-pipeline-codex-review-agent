@@ -7,6 +7,18 @@ import { buildCommentSignature, normalizeThreadFilePath } from "./commentSignatu
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 
+const REVIEW_HEAD_REGEX = /<!--\s*codex-review-head:\s*([0-9a-f]{7,40})\s*-->/i;
+const REVIEW_HEAD_REGEX_GLOBAL = /<!--\s*codex-review-head:\s*[0-9a-f]{7,40}\s*-->/gi;
+
+function extractReviewHeadSha(content: string): string | undefined {
+  const match = REVIEW_HEAD_REGEX.exec(content);
+  return match?.[1];
+}
+
+function stripReviewMetadata(content: string): string {
+  return content.replace(REVIEW_HEAD_REGEX_GLOBAL, "").trim();
+}
+
 export function resolveOrganizationUrl(org: string): string {
   if (org.startsWith("http")) {
     return org.replace(/\/$/, "");
@@ -85,6 +97,8 @@ function isTextCommentType(value: unknown): boolean {
 
 export type ExistingCommentSummary = {
   content: string;
+  rawContent: string;
+  reviewHeadSha?: string;
   filePath?: string;
   startLine?: number;
   endLine?: number;
@@ -137,8 +151,12 @@ function recordThreadSignatures(
     ) {
       continue;
     }
+    const sanitizedContent = stripReviewMetadata(content);
+    if (!sanitizedContent) {
+      continue;
+    }
     const signature = buildCommentSignature({
-      content,
+      content: sanitizedContent,
       filePath: filePath ? normalizeThreadFilePath(filePath) : undefined,
       startLine: startLine ?? undefined,
       endLine: endLine ?? undefined,
@@ -155,7 +173,9 @@ function recordThreadSignatures(
             ? (comment as { id?: number }).id
             : undefined;
         summaries.push({
-          content,
+          content: sanitizedContent,
+          rawContent: content,
+          reviewHeadSha: extractReviewHeadSha(content),
           filePath: filePath ?? undefined,
           startLine: startLine ?? undefined,
           endLine: endLine ?? undefined,

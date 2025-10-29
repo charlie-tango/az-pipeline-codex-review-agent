@@ -14,7 +14,7 @@ import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
 import { callCodex } from "./codex.js";
 import { postOverallComment, postSuggestions } from "./commentPosting.js";
 import { ReviewError } from "./errors.js";
-import { buildPrompt, loadDiff, parseUnifiedDiff, truncateFiles } from "./git.js";
+import { buildPrompt, loadDiff, parseUnifiedDiff, truncateFiles, type LoadedDiff } from "./git.js";
 import { filterFileDiffs } from "./ignore.js";
 import { createLogger, getLogger, setLogger } from "./logging.js";
 import { filterReviewByIgnorePatterns, logReview, parseReview } from "./reviewProcessing.js";
@@ -53,9 +53,23 @@ async function main(): Promise<void> {
     }
   }
 
+  const previousReviewSha = findLatestReviewedSha(existingCommentSummaries);
+
   try {
-    const diffText = await loadDiff(options);
-    const fileDiffs = parseUnifiedDiff(diffText);
+    const diffInfo = await loadDiff(options, previousReviewSha);
+    if (!diffInfo.diffText.trim()) {
+      if (diffInfo.baseSha) {
+        logger.info(
+          "No changes detected since last reviewed commit %s; skipping review.",
+          diffInfo.baseSha.slice(0, 12),
+        );
+        return;
+      }
+      logger.warn("Diff contained no changes; skipping review.");
+      return;
+    }
+
+    const fileDiffs = parseUnifiedDiff(diffInfo.diffText);
     const filteredDiffs = filterFileDiffs(fileDiffs, options.ignoreFiles);
 
     if (filteredDiffs.length === 0) {
@@ -65,7 +79,10 @@ async function main(): Promise<void> {
 
     const truncated = truncateFiles(filteredDiffs, options.maxFiles, options.maxDiffChars);
     const diffPrompt = buildPrompt(truncated);
-    const existingFeedbackContext = buildExistingFeedbackContext(existingCommentSummaries);
+    const existingFeedbackContext = buildExistingFeedbackContext(
+      existingCommentSummaries,
+      previousReviewSha,
+    );
     const prompt = existingFeedbackContext
       ? `${existingFeedbackContext}\n\n---\n\n${diffPrompt}`
       : diffPrompt;
@@ -95,7 +112,7 @@ async function main(): Promise<void> {
       existingCommentSignatures = existingCommentSignatures
         ? new Set([...existingCommentSignatures, ...existing.signatures])
         : existing.signatures;
-      if (existingCommentSummaries.length === 0) {
+      if (existing.summaries.length > 0) {
         existingCommentSummaries = existing.summaries;
       }
     }
@@ -107,6 +124,7 @@ async function main(): Promise<void> {
       gitApi,
       repositoryId,
       existingCommentSignatures,
+      diffInfo.sourceSha,
     );
 
     const elapsedMs = Date.now() - startTime;
@@ -141,14 +159,30 @@ async function obtainReviewJson(prompt: string, options: CliOptions): Promise<st
   });
 }
 
-function buildExistingFeedbackContext(summaries: ExistingCommentSummary[]): string | undefined {
-  if (!summaries || summaries.length === 0) {
+function findLatestReviewedSha(summaries: ExistingCommentSummary[]): string | undefined {
+  const candidates = summaries
+    .filter((summary) => summary.reviewHeadSha)
+    .sort((a, b) => (b.commentId ?? 0) - (a.commentId ?? 0));
+  return candidates[0]?.reviewHeadSha;
+}
+
+function buildExistingFeedbackContext(
+  summaries: ExistingCommentSummary[],
+  lastReviewedSha?: string,
+): string | undefined {
+  const maxEntries = 20;
+  const displayable = summaries.filter((summary) => summary.content && summary.content.length > 0);
+
+  if (!lastReviewedSha && displayable.length === 0) {
     return undefined;
   }
 
-  const maxEntries = 20;
   const lines: string[] = [];
-  for (const summary of summaries.slice(0, maxEntries)) {
+  if (lastReviewedSha) {
+    lines.push(`Last reviewed commit: ${lastReviewedSha.slice(0, 12)}`);
+  }
+
+  for (const summary of displayable.slice(0, maxEntries)) {
     const location = summary.filePath
       ? `${summary.filePath}${
           summary.startLine
@@ -162,11 +196,17 @@ function buildExistingFeedbackContext(summaries: ExistingCommentSummary[]): stri
       : "General";
     const normalized = summary.content.replace(/\s+/g, " ").trim();
     const truncated = normalized.length > 280 ? `${normalized.slice(0, 277)}…` : normalized;
-    lines.push(`- ${location}: ${truncated}`);
+    if (truncated.length > 0) {
+      lines.push(`- ${location}: ${truncated}`);
+    }
   }
 
-  if (summaries.length > maxEntries) {
-    lines.push(`- …plus ${summaries.length - maxEntries} more existing comment(s).`);
+  if (displayable.length > maxEntries) {
+    lines.push(`- …plus ${displayable.length - maxEntries} more existing comment(s).`);
+  }
+
+  if (lines.length === 0) {
+    return undefined;
   }
 
   return [

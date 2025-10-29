@@ -34,6 +34,8 @@ The CLI auto-detects the PR metadata and source/target branches from Azure DevOp
 - `--diff-file mock.diff` – supply a local diff for testing instead of hitting Azure DevOps.
 - `--ignore-files 'docs/**' --ignore-files '**/*.md'` – exclude matching files from the Codex prompt and from posted comments.
 - `--prompt "Focus on accessibility and performance risks first."` – replace the default agent instruction with a custom one.
+
+The reviewer tracks the latest commit it has analyzed (via hidden metadata on the overall comment). Subsequent runs only diff against new commits, so Codex focuses on fresh changes rather than re-reporting earlier findings.
 - `--review-time-budget 20` – hint to Codex to prioritize its review within ~20 minutes.
 - `--debug` – enable verbose logs for troubleshooting.
 - `--openai-api-key sk-...` – provide the OpenAI key explicitly when the environment variable is unavailable.

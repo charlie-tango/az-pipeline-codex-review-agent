@@ -14,20 +14,10 @@ import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
 import { callCodex } from "./codex.js";
 import { postOverallComment, postSuggestions } from "./commentPosting.js";
 import { ReviewError } from "./errors.js";
-import {
-  type LoadedDiff,
-  buildPrompt,
-  loadDiff,
-  parseUnifiedDiff,
-  truncateFiles,
-} from "./git.js";
+import { type LoadedDiff, buildPrompt, loadDiff, parseUnifiedDiff, truncateFiles } from "./git.js";
 import { filterFileDiffs } from "./ignore.js";
 import { createLogger, getLogger, setLogger } from "./logging.js";
-import {
-  filterReviewByIgnorePatterns,
-  logReview,
-  parseReview,
-} from "./reviewProcessing.js";
+import { filterReviewByIgnorePatterns, logReview, parseReview } from "./reviewProcessing.js";
 import { formatElapsed } from "./utils.js";
 
 async function main(): Promise<void> {
@@ -35,8 +25,7 @@ async function main(): Promise<void> {
   try {
     options = parseArgs();
   } catch (error) {
-    const message =
-      error instanceof ReviewError ? error.message : (error as Error).message;
+    const message = error instanceof ReviewError ? error.message : (error as Error).message;
     console.error("[ERROR]", message);
     process.exitCode = 1;
     return;
@@ -46,10 +35,7 @@ async function main(): Promise<void> {
   setLogger(logger);
 
   if (options.debug) {
-    logger.debug(
-      "CLI options:",
-      JSON.stringify(redactOptions(options), null, 2),
-    );
+    logger.debug("CLI options:", JSON.stringify(redactOptions(options), null, 2));
   }
 
   const startTime = Date.now();
@@ -58,19 +44,12 @@ async function main(): Promise<void> {
 
   if (options.prId && options.repositoryId && options.azureToken) {
     try {
-      const existing = await fetchExistingCommentSignatures(
-        options,
-        options.repositoryId,
-      );
+      const existing = await fetchExistingCommentSignatures(options, options.repositoryId);
       existingCommentSummaries = existing.summaries;
       preFetchedSignatures = existing.signatures;
     } catch (error) {
-      const message =
-        error instanceof ReviewError ? error.message : (error as Error).message;
-      logger.warn(
-        "Failed to load existing PR feedback for prompt context: %s",
-        message,
-      );
+      const message = error instanceof ReviewError ? error.message : (error as Error).message;
+      logger.warn("Failed to load existing PR feedback for prompt context: %s", message);
     }
   }
 
@@ -94,17 +73,11 @@ async function main(): Promise<void> {
     const filteredDiffs = filterFileDiffs(fileDiffs, options.ignoreFiles);
 
     if (filteredDiffs.length === 0) {
-      logger.info(
-        "All changed files are ignored by configured patterns; skipping Codex review.",
-      );
+      logger.info("All changed files are ignored by configured patterns; skipping Codex review.");
       return;
     }
 
-    const truncated = truncateFiles(
-      filteredDiffs,
-      options.maxFiles,
-      options.maxDiffChars,
-    );
+    const truncated = truncateFiles(filteredDiffs, options.maxFiles, options.maxDiffChars);
     const diffPrompt = buildPrompt(truncated);
     const existingFeedbackContext = buildExistingFeedbackContext(
       existingCommentSummaries,
@@ -116,10 +89,7 @@ async function main(): Promise<void> {
 
     const rawJson = await obtainReviewJson(prompt, options);
     const review = parseReview(rawJson);
-    const filteredReview = filterReviewByIgnorePatterns(
-      review,
-      options.ignoreFiles,
-    );
+    const filteredReview = filterReviewByIgnorePatterns(review, options.ignoreFiles);
 
     if (options.outputJson) {
       writeFileSync(path.resolve(options.outputJson), rawJson, "utf8");
@@ -129,19 +99,16 @@ async function main(): Promise<void> {
 
     let gitApi: IGitApi | undefined;
     let repositoryId: string | undefined;
-    let existingCommentSignatures: Set<string> | undefined =
-      preFetchedSignatures ? new Set(preFetchedSignatures) : undefined;
+    let existingCommentSignatures: Set<string> | undefined = preFetchedSignatures
+      ? new Set(preFetchedSignatures)
+      : undefined;
 
     if (!options.dryRun && options.prId) {
       const client = await ensureGitClient(options);
       gitApi = client.gitApi;
       repositoryId = client.repositoryId;
 
-      const existing = await fetchExistingCommentSignatures(
-        options,
-        repositoryId,
-        gitApi,
-      );
+      const existing = await fetchExistingCommentSignatures(options, repositoryId, gitApi);
       existingCommentSignatures = existingCommentSignatures
         ? new Set([...existingCommentSignatures, ...existing.signatures])
         : existing.signatures;
@@ -150,13 +117,7 @@ async function main(): Promise<void> {
       }
     }
 
-    await postSuggestions(
-      options,
-      filteredReview,
-      gitApi,
-      repositoryId,
-      existingCommentSignatures,
-    );
+    await postSuggestions(options, filteredReview, gitApi, repositoryId, existingCommentSignatures);
     await postOverallComment(
       options,
       filteredReview,
@@ -167,21 +128,15 @@ async function main(): Promise<void> {
     );
 
     const elapsedMs = Date.now() - startTime;
-    logger.info(
-      `Review completed successfully in ${formatElapsed(elapsedMs)}.`,
-    );
+    logger.info(`Review completed successfully in ${formatElapsed(elapsedMs)}.`);
   } catch (error) {
-    const message =
-      error instanceof ReviewError ? error.message : (error as Error).message;
+    const message = error instanceof ReviewError ? error.message : (error as Error).message;
     logger.error("Review failed:", message);
     process.exitCode = 1;
   }
 }
 
-async function obtainReviewJson(
-  prompt: string,
-  options: CliOptions,
-): Promise<string> {
+async function obtainReviewJson(prompt: string, options: CliOptions): Promise<string> {
   const logger = getLogger();
 
   if (options.codexResponseFile) {
@@ -204,9 +159,7 @@ async function obtainReviewJson(
   });
 }
 
-function findLatestReviewedSha(
-  summaries: ExistingCommentSummary[],
-): string | undefined {
+function findLatestReviewedSha(summaries: ExistingCommentSummary[]): string | undefined {
   const candidates = summaries
     .filter((summary) => summary.reviewHeadSha)
     .sort((a, b) => (b.commentId ?? 0) - (a.commentId ?? 0));
@@ -218,9 +171,7 @@ function buildExistingFeedbackContext(
   lastReviewedSha?: string,
 ): string | undefined {
   const maxEntries = 20;
-  const displayable = summaries.filter(
-    (summary) => summary.content && summary.content.length > 0,
-  );
+  const displayable = summaries.filter((summary) => summary.content && summary.content.length > 0);
 
   if (!lastReviewedSha && displayable.length === 0) {
     return undefined;
@@ -244,17 +195,14 @@ function buildExistingFeedbackContext(
         }`
       : "General";
     const normalized = summary.content.replace(/\s+/g, " ").trim();
-    const truncated =
-      normalized.length > 280 ? `${normalized.slice(0, 277)}…` : normalized;
+    const truncated = normalized.length > 280 ? `${normalized.slice(0, 277)}…` : normalized;
     if (truncated.length > 0) {
       lines.push(`- ${location}: ${truncated}`);
     }
   }
 
   if (displayable.length > maxEntries) {
-    lines.push(
-      `- …plus ${displayable.length - maxEntries} more existing comment(s).`,
-    );
+    lines.push(`- …plus ${displayable.length - maxEntries} more existing comment(s).`);
   }
 
   if (lines.length === 0) {
@@ -262,7 +210,7 @@ function buildExistingFeedbackContext(
   }
 
   return [
-    "Existing PR feedback already posted, MUST NOT report issues that are already covered by existing feedback, if there is no suggestion or finding then don't post at all:",
+    "Existing PR feedback already posted, you MUST NOT report issues that are already covered by existing feedback, if there is no suggestion or finding then don't post at all:",
     ...lines,
   ].join("\n");
 }

@@ -32,6 +32,7 @@ export const CodexInstructionSchema = z.object({
   summary: z.string(),
   findings: z.array(FindingInstructionSchema),
   suggestions: z.array(SuggestionInstructionSchema),
+  shouldPostReview: z.boolean().default(true),
 });
 
 export const FindingSchema = z

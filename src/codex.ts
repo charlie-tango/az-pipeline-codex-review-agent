@@ -33,13 +33,10 @@ export async function callCodex(
     },
   ];
 
-  if (
-    typeof options.timeBudgetMinutes === "number" &&
-    options.timeBudgetMinutes > 0
-  ) {
+  if (typeof options.timeBudgetMinutes === "number" && options.timeBudgetMinutes > 0) {
     instructions.push({
       type: "text" as const,
-      text: `Work efficiently and limit your analysis to what you can cover in at most ${options.timeBudgetMinutes} minutes; prioritize the most important issues first.`,
+      text: `you SHOULD work efficiently and limit your analysis to what you can cover in at most ${options.timeBudgetMinutes} minutes; prioritize the most important issues first.`,
     });
   }
 
@@ -50,7 +47,11 @@ export async function callCodex(
     },
     {
       type: "text" as const,
-      text: `When emitting suggestion replacement text, include only the new lines exactly as they should appear in the file—do not repeat the original/removed code inside the suggestion block.`,
+      text: "Feel free to open and read any repository files you need for context; you SHOULD not limit yourself to the provided diff.",
+    },
+    {
+      type: "text" as const,
+      text: "When emitting suggestion replacement text, you MUST include only the new lines exactly as they should appear in the file—do not repeat the original/removed code inside the suggestion block.",
     },
     {
       type: "text" as const,
@@ -58,10 +59,7 @@ export async function callCodex(
     },
   );
 
-  logger.debug(
-    "Codex Prompt:",
-    instructions.map((instruction) => instruction.text).join("\n"),
-  );
+  logger.debug("Codex Prompt:", instructions.map((instruction) => instruction.text).join("\n"));
 
   const turn = await thread.run(instructions, {
     outputSchema: CODEX_OUTPUT_SCHEMA,

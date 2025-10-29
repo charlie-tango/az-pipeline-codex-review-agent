@@ -289,6 +289,15 @@ async function resolveExplicitSourceRef(ref: string): Promise<string | undefined
     candidates.add(`refs/heads/${branch}`);
     candidates.add(branch);
     fetchTargets.add(branch);
+  } else if (ref.startsWith("refs/pull/")) {
+    const prBranch = `${ref}`;
+    candidates.add(prBranch);
+    const mergeRef = `${prBranch}/merge`;
+    const headRef = `${prBranch}/head`;
+    candidates.add(mergeRef);
+    candidates.add(headRef);
+    fetchTargets.add(mergeRef);
+    fetchTargets.add(headRef);
   } else if (ref.startsWith("origin/")) {
     const branch = ref.slice("origin/".length);
     candidates.add(`refs/remotes/origin/${branch}`);

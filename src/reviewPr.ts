@@ -1018,8 +1018,11 @@ async function postOverallComment(
     logger.info("Dry-run: overall review comment would be:\n", commentText);
     return;
   }
-  if (!gitApi || !repositoryId) {
-    logger.warn("Git API unavailable; cannot post overall comment. Enable PAT and PR context.");
+  const resolvedRepositoryId = repositoryId ?? options.repositoryId;
+  if (!resolvedRepositoryId) {
+    logger.warn(
+      "Repository ID unavailable; cannot post overall comment. Provide --repository-id or ensure PAT access.",
+    );
     return;
   }
 
@@ -1033,7 +1036,7 @@ async function postOverallComment(
     ],
   };
 
-  await createThread(options, gitApi, repositoryId, thread);
+  await createThread(options, resolvedRepositoryId, thread, gitApi);
 }
 
 async function postSuggestions(
@@ -1048,6 +1051,14 @@ async function postSuggestions(
   }
   if (review.suggestions.length === 0) {
     logger.info("No suggestions to post.");
+    return;
+  }
+
+  const resolvedRepositoryId = repositoryId ?? options.repositoryId;
+  if (!resolvedRepositoryId) {
+    logger.warn(
+      "Repository ID unavailable; skipping inline suggestion threads. Provide --repository-id or ensure PAT access.",
+    );
     return;
   }
 
@@ -1083,11 +1094,6 @@ async function postSuggestions(
       continue;
     }
 
-    if (!gitApi || !repositoryId) {
-      logger.warn("Git API unavailable; skipping posting suggestion thread.");
-      continue;
-    }
-
     const thread: GitInterfaces.GitPullRequestCommentThread = {
       status: GitInterfaces.CommentThreadStatus.Active,
       comments: [
@@ -1103,15 +1109,15 @@ async function postSuggestions(
       },
     };
 
-    await createThread(options, gitApi, repositoryId, thread);
+    await createThread(options, resolvedRepositoryId, thread, gitApi);
   }
 }
 
 async function createThread(
   options: CliOptions,
-  gitApi: IGitApi,
   repositoryId: string,
   thread: GitInterfaces.GitPullRequestCommentThread,
+  gitApi?: IGitApi,
 ): Promise<void> {
   if (!options.project) {
     throw new ReviewError("Azure DevOps project name is required to post comments.");
@@ -1120,8 +1126,71 @@ async function createThread(
     throw new ReviewError("Pull request ID is required to post comments.");
   }
 
+  if (!repositoryId) {
+    throw new ReviewError("Repository ID is required to post comments.");
+  }
+
+  try {
+    await createThreadViaRest(options, repositoryId, thread);
+    return;
+  } catch (error) {
+    const message = (error as Error).message;
+    logger.warn("Falling back to Azure DevOps client after REST failure: %s", message);
+  }
+
+  if (!gitApi) {
+    throw new ReviewError("Azure DevOps client unavailable; cannot post comments.");
+  }
+
   logger.info("Posting review thread to PR", options.prId);
   await gitApi.createThread(thread, repositoryId, options.prId, options.project);
+}
+
+async function createThreadViaRest(
+  options: CliOptions,
+  repositoryId: string,
+  thread: GitInterfaces.GitPullRequestCommentThread,
+): Promise<void> {
+  if (!options.organization) {
+    throw new ReviewError("Azure DevOps organization URL is required. Pass --organization.");
+  }
+  if (!options.azureToken) {
+    throw new ReviewError(
+      "Azure DevOps PAT not provided. Set AZURE_DEVOPS_PAT, SYSTEM_ACCESSTOKEN, or pass --azure-token.",
+    );
+  }
+  const project = options.project;
+  if (!project) {
+    throw new ReviewError("Azure DevOps project name is required. Pass --project.");
+  }
+
+  const orgUrl = resolveOrganizationUrl(options.organization);
+  const projectSegment = encodeURIComponent(project);
+  const url = `${orgUrl}/${projectSegment}/_apis/git/repositories/${repositoryId}/pullRequests/${options.prId}/threads?api-version=7.0`;
+
+  logger.info("Posting review thread to PR %s via REST API", options.prId);
+  const authHeader = Buffer.from(`:${options.azureToken}`).toString("base64");
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${authHeader}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(thread),
+  });
+
+  if (response.ok) {
+    return;
+  }
+
+  const errorBody = (await response.text()).trim();
+  const truncatedError = errorBody.length > 500 ? `${errorBody.slice(0, 500)}…` : errorBody;
+  throw new ReviewError(
+    `Azure DevOps REST create thread failed (${response.status} ${response.statusText})${
+      truncatedError ? `: ${truncatedError}` : ""
+    }`,
+  );
 }
 
 async function ensureGitClient(

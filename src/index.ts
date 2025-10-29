@@ -262,7 +262,7 @@ function buildExistingFeedbackContext(
   }
 
   return [
-    "Existing PR feedback already posted (SHOULD only reporting issues that are already covered by existing feedback):",
+    "Existing PR feedback already posted, MUST NOT report issue that are already covered by existing feedback:",
     ...lines,
   ].join("\n");
 }

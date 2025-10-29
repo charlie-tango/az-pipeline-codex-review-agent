@@ -181,38 +181,10 @@ export function filterReviewByIgnorePatterns(
   }
 
   const filteredSuggestions = filterSuggestionsByIgnorePatterns(review.suggestions, patterns);
-  const suggestionKeys = new Set(
-    filteredSuggestions.map(
-      (suggestion) =>
-        `${suggestion.file}:${suggestion.startLine}:${suggestion.endLine}:${suggestion.comment}:${suggestion.replacement}`,
-    ),
-  );
-
-  const filteredFindings = review.findings
-    .filter((finding) => {
-      const file = finding.file ?? finding.suggestion?.file;
-      if (!file) {
-        return true;
-      }
-      return !shouldIgnoreFile(file, patterns);
-    })
-    .map((finding) => {
-      if (!finding.suggestion) {
-        return finding;
-      }
-      const suggestionKey = finding.suggestion
-        ? `${finding.suggestion.file ?? finding.file ?? ""}:${finding.suggestion.start_line}:${finding.suggestion.end_line ?? finding.suggestion.start_line}:${finding.suggestion.comment}:${finding.suggestion.replacement}`
-        : "";
-      const matchesExisting = suggestionKey ? suggestionKeys.has(suggestionKey) : false;
-      if (!matchesExisting) {
-        return { ...finding, suggestion: null };
-      }
-      return finding;
-    });
 
   return {
     summary: review.summary,
-    findings: filteredFindings,
+    findings: review.findings,
     suggestions: filteredSuggestions,
   };
 }

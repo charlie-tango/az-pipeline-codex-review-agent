@@ -8,7 +8,11 @@ import { CODEX_OUTPUT_SCHEMA } from "./schemas.js";
 
 export async function callCodex(
   prompt: string,
-  options: { timeBudgetMinutes?: number; apiKey?: string; instructionOverride?: string } = {},
+  options: {
+    timeBudgetMinutes?: number;
+    apiKey?: string;
+    instructionOverride?: string;
+  } = {},
 ): Promise<string> {
   const logger = getLogger();
   const codexOptions = options.apiKey ? { apiKey: options.apiKey } : undefined;
@@ -46,6 +50,8 @@ export async function callCodex(
       text: prompt,
     },
   );
+
+  logger.debug("Codex Prompt:", instructions.join("\n"));
 
   const turn = await thread.run(instructions, {
     outputSchema: CODEX_OUTPUT_SCHEMA,

@@ -8,7 +8,11 @@ const execFileAsync = promisify(execFile);
 
 export async function runCommand(
   command: string[],
-  options: { allowFailure?: boolean; env?: NodeJS.ProcessEnv } = {},
+  options: {
+    allowFailure?: boolean;
+    env?: NodeJS.ProcessEnv;
+    suppressFailureLog?: boolean;
+  } = {},
 ): Promise<string> {
   const [file, ...args] = command;
   const logger = getLogger();
@@ -26,7 +30,11 @@ export async function runCommand(
     };
     const stderr = err.stderr ?? "";
     if (options.allowFailure) {
-      logger.warn("Command allowed to fail:", stderr.trim());
+      if (!options.suppressFailureLog) {
+        logger.warn("Command allowed to fail:", stderr.trim());
+      } else {
+        logger.debug("Command allowed to fail (suppressed log):", command.join(" "));
+      }
       return err.stdout ?? "";
     }
     logger.error("Command failed:", stderr.trim());

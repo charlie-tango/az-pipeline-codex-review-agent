@@ -29,6 +29,7 @@
     "@openai/codex-sdk": "^0.50.0",
     "azure-devops-node-api": "^15.1.1",
     "micromatch": "^4.0.5",
+    "simple-git": "^3.21.0",
     "yargs": "^17.7.2",
     "zod": "^4.0.0"
   },

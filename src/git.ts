@@ -2,12 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { type SimpleGit, simpleGit } from "simple-git";
+
 import { ensureGitClient, resolveOrganizationUrl } from "./azure.js";
 import type { CliOptions } from "./cli.js";
 import { runCommand } from "./command.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 import type { FileDiff } from "./types.js";
+
+const git: SimpleGit = simpleGit();
 
 export type LoadedDiff = {
   diffText: string;
@@ -21,6 +25,7 @@ export type LoadedDiff = {
 
 export async function loadDiff(options: CliOptions, sinceCommit?: string): Promise<LoadedDiff> {
   const logger = getLogger();
+
   if (options.diffFile) {
     const diffPath = path.resolve(options.diffFile);
     logger.info("Loading diff from", diffPath);
@@ -120,9 +125,7 @@ export async function inferTargetBranch(options: CliOptions): Promise<string | u
     }
   }
 
-  const symbolicRef = (
-    await runCommand(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], { allowFailure: true })
-  ).trim();
+  const symbolicRef = await tryGetSymbolicRef("refs/remotes/origin/HEAD");
   if (symbolicRef) {
     const match = symbolicRef.match(/^refs\/remotes\/origin\/(.+)$/);
     if (match?.[1]) {
@@ -130,9 +133,7 @@ export async function inferTargetBranch(options: CliOptions): Promise<string | u
     }
   }
 
-  const remoteInfo = (
-    await runCommand(["git", "remote", "show", "origin"], { allowFailure: true })
-  ).trim();
+  const remoteInfo = await tryRemoteShowOrigin();
   if (remoteInfo) {
     const headMatch = remoteInfo.match(/HEAD branch: (.+)/);
     if (headMatch?.[1]) {
@@ -325,8 +326,7 @@ async function resolveExplicitSourceRef(ref: string): Promise<string | undefined
   }
 
   for (const target of fetchTargets) {
-    logger.debug("Fetching source branch origin/%s", target);
-    await runCommand(["git", "fetch", "origin", target], { allowFailure: true });
+    await fetchRemoteTarget(target);
   }
 
   for (const candidate of [ref, ...candidates]) {
@@ -338,12 +338,43 @@ async function resolveExplicitSourceRef(ref: string): Promise<string | undefined
   return undefined;
 }
 
-async function refExists(ref: string): Promise<boolean> {
+async function fetchRemoteTarget(target: string): Promise<void> {
   try {
-    await runCommand(["git", "rev-parse", "--verify", `${ref}^{commit}`]);
-    return true;
+    await git.fetch("origin", target);
+  } catch (error) {
+    getLogger().debug(
+      "Failed to fetch origin/%s: %s",
+      target,
+      (error as Error).message ?? String(error),
+    );
+  }
+}
+
+async function refExists(ref: string): Promise<boolean> {
+  return (await tryRevParse("--verify", `${ref}^{commit}`)) !== undefined;
+}
+
+async function tryRevParse(...args: string[]): Promise<string | undefined> {
+  try {
+    return (await git.revparse(args)).trim();
   } catch {
-    return false;
+    return undefined;
+  }
+}
+
+async function tryGetSymbolicRef(ref: string): Promise<string | undefined> {
+  try {
+    return (await git.raw(["symbolic-ref", ref])).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+async function tryRemoteShowOrigin(): Promise<string | undefined> {
+  try {
+    return (await git.raw(["remote", "show", "origin"])).trim();
+  } catch {
+    return undefined;
   }
 }
 
@@ -355,13 +386,11 @@ async function gitDiff(options: CliOptions, sinceCommit?: string): Promise<Loade
     : targetBranch;
   const fetchRef = `origin/${branchName}`;
 
-  await runCommand(["git", "fetch", "origin", branchName], {
-    allowFailure: false,
-  });
+  await git.fetch("origin", branchName);
 
-  const targetSha = (await runCommand(["git", "rev-parse", fetchRef])).trim();
+  const targetSha = (await git.revparse([fetchRef])).trim();
   const sourceRef = await resolveSourceRef(options);
-  const sourceSha = (await runCommand(["git", "rev-parse", sourceRef])).trim();
+  const sourceSha = (await git.revparse([sourceRef])).trim();
 
   let diffText = "";
   let comparisonDescription = "";
@@ -370,14 +399,14 @@ async function gitDiff(options: CliOptions, sinceCommit?: string): Promise<Loade
   if (sinceCommit) {
     const trimmed = sinceCommit.trim();
     if (trimmed.length > 0 && trimmed !== sourceSha && (await refExists(trimmed))) {
-      baseSha = (await runCommand(["git", "rev-parse", trimmed])).trim();
+      baseSha = (await git.revparse([trimmed])).trim();
       comparisonDescription = `${baseSha}...${sourceSha}`;
       logger.info(
         "Computing incremental git diff %s...%s",
         baseSha.slice(0, 12),
         sourceSha.slice(0, 12),
       );
-      diffText = await runCommand(["git", "diff", "--unified=3", comparisonDescription]);
+      diffText = await git.diff(["--unified=3", comparisonDescription]);
     } else if (trimmed.length > 0 && trimmed !== sourceSha) {
       logger.warn(
         "Previous review commit %s not found locally; falling back to full diff.",
@@ -389,7 +418,7 @@ async function gitDiff(options: CliOptions, sinceCommit?: string): Promise<Loade
   if (!comparisonDescription) {
     comparisonDescription = `${fetchRef}...${sourceRef}`;
     logger.info("Computing git diff %s", comparisonDescription);
-    diffText = await runCommand(["git", "diff", "--unified=3", comparisonDescription]);
+    diffText = await git.diff(["--unified=3", comparisonDescription]);
   } else if (!diffText.trim()) {
     logger.info("No changes detected since %s; skipping incremental diff.", baseSha);
   }

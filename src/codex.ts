@@ -73,6 +73,13 @@ export async function callCodex(
     throw new ReviewError("Codex response was empty.");
   }
 
+  const usage = turn.usage
+    ? `inputTokens=${turn.usage.input_tokens ?? "?"}, cachedInputTokens=${
+        turn.usage.cached_input_tokens ?? "?"
+      }, outputTokens=${turn.usage.output_tokens ?? "?"}`
+    : "usage unavailable";
+  logger.debug("Codex usage:", usage);
+
   logger.debug("Raw model output:", rawOutput);
   return rawOutput;
 }

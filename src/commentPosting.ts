@@ -1,4 +1,3 @@
-import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
 import { createThreadViaRest } from "./azure.js";
@@ -18,7 +17,6 @@ import type { ReviewResult } from "./types.js";
 export async function postOverallComment(
   options: CliOptions,
   review: ReviewResult,
-  gitApi?: IGitApi,
   repositoryId?: string,
   existingCommentSignatures?: Set<string>,
   reviewedSourceSha?: string,
@@ -65,7 +63,7 @@ export async function postOverallComment(
     ],
   };
 
-  await createThread(options, resolvedRepositoryId, thread, gitApi);
+  await createThread(options, resolvedRepositoryId, thread);
   if (signature) {
     existingCommentSignatures?.add(signature);
   }
@@ -74,7 +72,6 @@ export async function postOverallComment(
 export async function postSuggestions(
   options: CliOptions,
   review: ReviewResult,
-  gitApi?: IGitApi,
   repositoryId?: string,
   existingCommentSignatures?: Set<string>,
 ): Promise<void> {
@@ -151,7 +148,7 @@ export async function postSuggestions(
       },
     };
 
-    await createThread(options, resolvedRepositoryId, thread, gitApi);
+    await createThread(options, resolvedRepositoryId, thread);
     if (signature) {
       existingCommentSignatures?.add(signature);
     }
@@ -162,7 +159,6 @@ async function createThread(
   options: CliOptions,
   repositoryId: string,
   thread: GitInterfaces.GitPullRequestCommentThread,
-  gitApi?: IGitApi,
 ): Promise<void> {
   if (!options.project) {
     throw new ReviewError("Azure DevOps project name is required to post comments.");
@@ -175,18 +171,5 @@ async function createThread(
     throw new ReviewError("Repository ID is required to post comments.");
   }
 
-  try {
-    await createThreadViaRest(options, repositoryId, thread);
-    return;
-  } catch (error) {
-    const message = (error as Error).message;
-    getLogger().warn("Falling back to Azure DevOps client after REST failure: %s", message);
-  }
-
-  if (!gitApi) {
-    throw new ReviewError("Azure DevOps client unavailable; cannot post comments.");
-  }
-
-  getLogger().info("Posting review thread to PR", options.prId);
-  await gitApi.createThread(thread, repositoryId, options.prId, options.project);
+  await createThreadViaRest(options, repositoryId, thread);
 }

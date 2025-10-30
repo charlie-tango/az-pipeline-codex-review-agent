@@ -199,80 +199,33 @@ type RestThread = {
   };
 };
 
-export class AzureThreadService {
-  constructor(
-    private readonly options: CliOptions,
-    private readonly gitApi?: IGitApi,
-  ) {}
-
-  async fetchExisting(
-    repositoryId?: string,
-  ): Promise<{ signatures: Set<string>; summaries: ExistingCommentSummary[] }> {
-    const signatures = new Set<string>();
-    const summaries: ExistingCommentSummary[] = [];
-
-    if (!this.options.prId || !repositoryId) {
-      return { signatures, summaries };
-    }
-
-    const clientThreads = await this.tryFetchWithClient(repositoryId);
-    if (clientThreads) {
-      for (const thread of clientThreads ?? []) {
-        recordThreadSignatures(thread, signatures, summaries);
-      }
-      return { signatures, summaries };
-    }
-
-    await this.tryFetchWithRest(repositoryId, signatures, summaries);
-    return { signatures, summaries };
-  }
-
-  private async tryFetchWithClient(
-    repositoryId: string,
-  ): Promise<GitInterfaces.GitPullRequestCommentThread[] | null> {
-    if (!this.gitApi) {
-      return null;
-    }
-    try {
-      if (!this.options.prId) {
-        throw new ReviewError("Pull request ID is required to fetch existing threads.");
-      }
-      return await this.gitApi.getThreads(repositoryId, this.options.prId, this.options.project);
-    } catch (error) {
-      getLogger().warn(
-        "Failed to fetch existing threads via Azure DevOps client: %s",
-        (error as Error).message,
-      );
-      return null;
-    }
-  }
-
-  private async tryFetchWithRest(
-    repositoryId: string,
-    signatures: Set<string>,
-    summaries: ExistingCommentSummary[],
-  ): Promise<void> {
-    try {
-      const threads = await fetchThreadsViaRest(this.options, repositoryId);
-      for (const thread of threads) {
-        recordThreadSignatures(thread, signatures, summaries);
-      }
-    } catch (error) {
-      getLogger().warn(
-        "Failed to fetch existing threads via REST API: %s",
-        (error as Error).message,
-      );
-    }
-  }
-}
-
 export async function fetchExistingCommentSignatures(
   options: CliOptions,
   repositoryId?: string,
-  gitApi?: IGitApi,
 ): Promise<{ signatures: Set<string>; summaries: ExistingCommentSummary[] }> {
-  const service = new AzureThreadService(options, gitApi);
-  return service.fetchExisting(repositoryId);
+  const signatures = new Set<string>();
+  const summaries: ExistingCommentSummary[] = [];
+  if (!options.prId) {
+    return { signatures, summaries };
+  }
+  const resolvedRepositoryId = repositoryId ?? (await resolveRepositoryIdViaRest(options));
+  if (!resolvedRepositoryId) {
+    return { signatures, summaries };
+  }
+
+  try {
+    const threads = await fetchThreadsViaRest(options, resolvedRepositoryId);
+    for (const thread of threads) {
+      recordThreadSignatures(thread, signatures, summaries);
+    }
+  } catch (error) {
+    getLogger().warn(
+      "Failed to fetch existing threads via REST API: %s",
+      (error as Error).message,
+    );
+  }
+
+  return { signatures, summaries };
 }
 
 export async function createThreadViaRest(
@@ -356,4 +309,52 @@ async function fetchThreadsViaRest(
     return ((payload as { value?: RestThread[] }).value ?? []) as RestThread[];
   }
   return [];
+}
+
+export async function resolveRepositoryIdViaRest(options: CliOptions): Promise<string | undefined> {
+  if (options.repositoryId) {
+    return options.repositoryId;
+  }
+  if (!options.repository) {
+    throw new ReviewError("Repository name is required to resolve repository ID.");
+  }
+  if (!options.organization) {
+    throw new ReviewError("Azure DevOps organization URL is required. Pass --organization.");
+  }
+  if (!options.project) {
+    throw new ReviewError("Azure DevOps project name is required. Pass --project.");
+  }
+  const token = options.azureToken;
+  if (!token) {
+    throw new ReviewError(
+      "Azure DevOps PAT not provided. Set AZURE_DEVOPS_PAT, SYSTEM_ACCESSTOKEN, or pass --azure-token.",
+    );
+  }
+
+  const orgUrl = resolveOrganizationUrl(options.organization);
+  const projectSegment = encodeURIComponent(options.project);
+  const repositorySegment = encodeURIComponent(options.repository);
+  const url = `${orgUrl}/${projectSegment}/_apis/git/repositories/${repositorySegment}?api-version=7.0`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Basic ${buildAuthHeader(token)}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.text()).trim();
+    throw new ReviewError(
+      `Azure DevOps REST repository lookup failed (${response.status} ${response.statusText})${
+        errorBody ? `: ${errorBody}` : ""
+      }`,
+    );
+  }
+
+  const payload = (await response.json()) as { id?: string };
+  if (!payload?.id) {
+    throw new ReviewError(`Azure DevOps REST repository lookup did not return an ID for ${options.repository}`);
+  }
+  return payload.id;
 }

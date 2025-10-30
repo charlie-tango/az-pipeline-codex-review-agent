@@ -6,9 +6,8 @@ import process from "node:process";
 
 import {
   type ExistingCommentSummary,
-  type IGitApi,
-  ensureGitClient,
   fetchExistingCommentSignatures,
+  resolveRepositoryIdViaRest,
 } from "./azure.js";
 import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
 import { callCodex } from "./codex.js";
@@ -92,14 +91,12 @@ async function main(): Promise<void> {
     await postSuggestions(
       options,
       filteredReview,
-      postingContext.gitApi,
       postingContext.repositoryId,
       postingContext.existingCommentSignatures,
     );
     await postOverallComment(
       options,
       filteredReview,
-      postingContext.gitApi,
       postingContext.repositoryId,
       postingContext.existingCommentSignatures,
       diffInfo.sourceSha,
@@ -219,7 +216,6 @@ async function prefetchExistingFeedback(
 }
 
 type PostingContext = {
-  gitApi?: IGitApi;
   repositoryId?: string;
   existingCommentSignatures?: Set<string>;
   summaries: ExistingCommentSummary[];
@@ -230,17 +226,16 @@ async function preparePostingContext(
   preFetchedSignatures: Set<string> | undefined,
   existingCommentSummaries: ExistingCommentSummary[],
 ): Promise<PostingContext> {
-  let gitApi: IGitApi | undefined;
-  let repositoryId: string | undefined;
+  let repositoryId: string | undefined = options.repositoryId;
   let signatures = preFetchedSignatures ? new Set(preFetchedSignatures) : undefined;
   let summaries = existingCommentSummaries;
 
   if (!options.dryRun && options.prId) {
-    const client = await ensureGitClient(options);
-    gitApi = client.gitApi;
-    repositoryId = client.repositoryId;
+    repositoryId = repositoryId ?? (await resolveRepositoryIdViaRest(options));
+  }
 
-    const existing = await fetchExistingCommentSignatures(options, repositoryId, gitApi);
+  if (!options.dryRun && options.prId && repositoryId) {
+    const existing = await fetchExistingCommentSignatures(options, repositoryId);
     signatures = signatures
       ? new Set([...signatures, ...existing.signatures])
       : existing.signatures;
@@ -250,7 +245,6 @@ async function preparePostingContext(
   }
 
   return {
-    gitApi,
     repositoryId,
     existingCommentSignatures: signatures,
     summaries,

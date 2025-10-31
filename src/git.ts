@@ -2,9 +2,8 @@ import process from "node:process";
 
 import { type SimpleGit, simpleGit } from "simple-git";
 
-import { ensureGitClient, resolveOrganizationUrl } from "./azure.js";
+import { fetchPullRequestMetadata, type PullRequestMetadata } from "./azure.js";
 import type { CliOptions } from "./cli.js";
-import { runCommand } from "./command.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 import type { FileDiff } from "./types.js";
@@ -21,10 +20,14 @@ export type LoadedDiff = {
   comparisonDescription: string;
 };
 
-export async function loadDiff(options: CliOptions, sinceCommit?: string): Promise<LoadedDiff> {
+export async function loadDiff(
+  options: CliOptions,
+  sinceCommit?: string,
+  prMetadata?: PullRequestMetadata,
+): Promise<LoadedDiff> {
   const logger = getLogger();
 
-  const targetBranch = await determineTargetBranch(options);
+  const targetBranch = await determineTargetBranch(options, prMetadata);
   logger.info(
     "Using target branch %s for PR #%s",
     targetBranch,
@@ -40,12 +43,20 @@ export async function loadDiff(options: CliOptions, sinceCommit?: string): Promi
   }
 }
 
-async function determineTargetBranch(options: CliOptions): Promise<string> {
+async function determineTargetBranch(
+  options: CliOptions,
+  metadata?: PullRequestMetadata,
+): Promise<string> {
   const logger = getLogger();
 
+  const initialTarget = normalizeBranchRef(metadata?.targetRefName);
+  if (initialTarget) {
+    return initialTarget;
+  }
+
   try {
-    const resolved = await resolvePullRequestTargetBranch(options);
-    const normalized = normalizeBranchRef(resolved);
+    const fetched = await fetchPullRequestMetadata(options);
+    const normalized = normalizeBranchRef(fetched?.targetRefName);
     if (normalized) {
       return normalized;
     }
@@ -97,85 +108,6 @@ function normalizeBranchRef(ref: string | undefined): string | undefined {
     return undefined;
   }
   return `refs/heads/${trimmed.replace(/^origin\//, "")}`;
-}
-
-export async function resolvePullRequestTargetBranch(
-  options: CliOptions,
-): Promise<string | undefined> {
-  if (!options.prId) {
-    return undefined;
-  }
-
-  if (options.azureToken) {
-    try {
-      const azTarget = await resolvePullRequestTargetBranchWithAzCli(options);
-      if (azTarget) {
-        return azTarget;
-      }
-    } catch (error) {
-      getLogger().debug(
-        "Azure CLI target branch lookup failed: %s",
-        (error as Error).message ?? String(error),
-      );
-    }
-  }
-
-  if (!options.azureToken) {
-    throw new ReviewError("Azure DevOps PAT is required to resolve pull request target branch.");
-  }
-
-  const { gitApi, repositoryId } = await ensureGitClient(options);
-  const pr = await gitApi.getPullRequest(repositoryId, options.prId, options.project);
-
-  return pr?.targetRefName ?? undefined;
-}
-
-async function resolvePullRequestTargetBranchWithAzCli(
-  options: CliOptions,
-): Promise<string | undefined> {
-  if (!options.project || !options.organization) {
-    return undefined;
-  }
-  if (!options.prId) {
-    return undefined;
-  }
-
-  const orgUrl = resolveOrganizationUrl(options.organization);
-  const env = {
-    ...process.env,
-    AZURE_DEVOPS_EXT_PAT: options.azureToken ?? process.env.AZURE_DEVOPS_EXT_PAT,
-  };
-
-  const azArgs = [
-    "az",
-    "repos",
-    "pr",
-    "show",
-    "--id",
-    String(options.prId),
-    "--organization",
-    orgUrl,
-    "--project",
-    options.project,
-    "--output",
-    "json",
-  ];
-
-  const stdout = await runCommand(azArgs, { allowFailure: true, env });
-  if (!stdout.trim()) {
-    return undefined;
-  }
-
-  try {
-    const payload = JSON.parse(stdout) as { targetRefName?: string | null };
-    return payload.targetRefName ?? undefined;
-  } catch (error) {
-    getLogger().debug(
-      "Failed to parse Azure CLI pull request payload: %s",
-      (error as Error).message ?? String(error),
-    );
-    return undefined;
-  }
 }
 
 async function resolveSourceRef(): Promise<string> {

@@ -7,6 +7,8 @@ import process from "node:process";
 import {
   type ExistingCommentSummary,
   fetchExistingCommentSignatures,
+  fetchPullRequestMetadata,
+  type PullRequestMetadata,
   resolveRepositoryIdViaRest,
 } from "./azure.js";
 import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
@@ -44,9 +46,18 @@ async function main(): Promise<void> {
   const preFetchedSignatures = prefetchResult.preFetchedSignatures;
 
   const previousReviewSha = findLatestReviewedSha(existingCommentSummaries);
+  let prMetadata: PullRequestMetadata | undefined;
+  if (options.prId) {
+    try {
+      prMetadata = await fetchPullRequestMetadata(options);
+    } catch (error) {
+      const message = error instanceof ReviewError ? error.message : (error as Error).message;
+      logger.warn("Failed to load pull request metadata: %s", message);
+    }
+  }
 
   try {
-    const diffInfo = await loadDiff(options, previousReviewSha);
+    const diffInfo = await loadDiff(options, previousReviewSha, prMetadata);
     if (!diffInfo.diffText.trim()) {
       if (diffInfo.baseSha) {
         logger.info(
@@ -69,7 +80,12 @@ async function main(): Promise<void> {
 
     const truncated = truncateFiles(filteredDiffs, options.maxFiles, options.maxDiffChars);
     const diffPrompt = buildPrompt(truncated);
-    const prompt = assembleReviewPrompt(diffPrompt, existingCommentSummaries, previousReviewSha);
+    const prompt = assembleReviewPrompt(
+      diffPrompt,
+      existingCommentSummaries,
+      previousReviewSha,
+      prMetadata,
+    );
 
     const rawJson = await obtainReviewJson(prompt, options);
     const review = parseReview(rawJson);
@@ -190,6 +206,44 @@ function buildExistingFeedbackContext(
   ].join("\n");
 }
 
+function buildPullRequestContext(metadata?: PullRequestMetadata): string | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+
+  const title = metadata.title?.trim();
+  const description = metadata.description?.trim();
+  const source = metadata.sourceRefName?.trim();
+  const target = metadata.targetRefName?.trim();
+
+  const sections: string[] = [];
+  if (title) {
+    sections.push(`Title: ${title}`);
+  }
+
+  if (source || target) {
+    const sourceLabel = source ?? "<unknown>";
+    const targetLabel = target ?? "<unknown>";
+    sections.push(`Branches: ${sourceLabel} -> ${targetLabel}`);
+  }
+
+  if (description) {
+    const normalized = description.replace(/\r\n/g, "\n").trim();
+    const maxLength = 2000;
+    const truncated =
+      normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
+    if (truncated.length > 0) {
+      sections.push(`Description:\n${truncated}`);
+    }
+  }
+
+  if (sections.length === 0) {
+    return undefined;
+  }
+
+  return ["Pull request context (from Azure DevOps):", ...sections].join("\n\n");
+}
+
 type PrefetchResult = {
   summaries: ExistingCommentSummary[];
   preFetchedSignatures?: Set<string>;
@@ -255,14 +309,26 @@ function assembleReviewPrompt(
   diffPrompt: string,
   existingSummaries: ExistingCommentSummary[],
   previousReviewSha: string | undefined,
+  prMetadata: PullRequestMetadata | undefined,
 ): string {
+  const sections: string[] = [];
+
+  const prContext = buildPullRequestContext(prMetadata);
+  if (prContext) {
+    sections.push(prContext);
+  }
+
   const existingFeedbackContext = buildExistingFeedbackContext(
     existingSummaries,
     previousReviewSha,
   );
-  return existingFeedbackContext
-    ? `${existingFeedbackContext}\n\n---\n\n${diffPrompt}`
-    : diffPrompt;
+  if (existingFeedbackContext) {
+    sections.push(existingFeedbackContext);
+  }
+
+  sections.push(diffPrompt);
+
+  return sections.join("\n\n---\n\n");
 }
 
 void main();

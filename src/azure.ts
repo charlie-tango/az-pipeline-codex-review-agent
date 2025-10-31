@@ -4,6 +4,7 @@ import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.j
 
 import type { CliOptions } from "./cli.js";
 import { buildCommentSignature, normalizeThreadFilePath } from "./commentSignatures.js";
+import { runCommand } from "./command.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 
@@ -76,6 +77,45 @@ export function buildThreadsUrl(options: CliOptions, repositoryId: string): stri
   const orgUrl = resolveOrganizationUrl(options.organization);
   const projectSegment = encodeURIComponent(options.project);
   return `${orgUrl}/${projectSegment}/_apis/git/repositories/${repositoryId}/pullRequests/${options.prId}/threads?api-version=7.0`;
+}
+
+export type PullRequestMetadata = {
+  targetRefName?: string;
+  sourceRefName?: string;
+  title?: string;
+  description?: string;
+};
+
+export async function fetchPullRequestMetadata(
+  options: CliOptions,
+): Promise<PullRequestMetadata | undefined> {
+  if (!options.prId) {
+    return undefined;
+  }
+
+  const cliMetadata = await fetchPullRequestMetadataWithAzCli(options);
+  if (cliMetadata) {
+    return cliMetadata;
+  }
+
+  if (!options.azureToken) {
+    throw new ReviewError(
+      "Azure DevOps PAT is required to resolve pull request metadata. Set AZURE_DEVOPS_PAT, SYSTEM_ACCESSTOKEN, or pass --azure-token.",
+    );
+  }
+
+  const { gitApi, repositoryId } = await ensureGitClient(options);
+  const pr = await gitApi.getPullRequest(repositoryId, options.prId, options.project);
+  if (!pr) {
+    return undefined;
+  }
+
+  return {
+    targetRefName: pr.targetRefName ?? undefined,
+    sourceRefName: pr.sourceRefName ?? undefined,
+    title: pr.title ?? undefined,
+    description: pr.description ?? undefined,
+  };
 }
 
 function buildAuthHeader(token: string): string {
@@ -261,7 +301,7 @@ export async function createThreadViaRest(
   }
 
   const errorBody = (await response.text()).trim();
-  const truncatedError = errorBody.length > 500 ? `${errorBody.slice(0, 500)}…` : errorBody;
+  const truncatedError = errorBody.length > 500 ? `${errorBody.slice(0, 500)}?` : errorBody;
   throw new ReviewError(
     `Azure DevOps REST create thread failed (${response.status} ${response.statusText})${
       truncatedError ? `: ${truncatedError}` : ""
@@ -309,6 +349,65 @@ async function fetchThreadsViaRest(
     return ((payload as { value?: RestThread[] }).value ?? []) as RestThread[];
   }
   return [];
+}
+
+async function fetchPullRequestMetadataWithAzCli(
+  options: CliOptions,
+): Promise<PullRequestMetadata | undefined> {
+  if (!options.project || !options.organization || !options.prId) {
+    return undefined;
+  }
+
+  if (!options.azureToken) {
+    return undefined;
+  }
+
+  const env = {
+    ...process.env,
+    AZURE_DEVOPS_EXT_PAT: options.azureToken ?? process.env.AZURE_DEVOPS_EXT_PAT,
+  };
+
+  const orgUrl = resolveOrganizationUrl(options.organization);
+  const azArgs = [
+    "az",
+    "repos",
+    "pr",
+    "show",
+    "--id",
+    String(options.prId),
+    "--organization",
+    orgUrl,
+    "--project",
+    options.project,
+    "--output",
+    "json",
+  ];
+
+  const stdout = await runCommand(azArgs, { allowFailure: true, env });
+  if (!stdout.trim()) {
+    return undefined;
+  }
+
+  try {
+    const payload = JSON.parse(stdout) as {
+      targetRefName?: string | null;
+      sourceRefName?: string | null;
+      title?: string | null;
+      description?: string | null;
+    };
+    return {
+      targetRefName: payload.targetRefName ?? undefined,
+      sourceRefName: payload.sourceRefName ?? undefined,
+      title: payload.title ?? undefined,
+      description: payload.description ?? undefined,
+    };
+  } catch (error) {
+    getLogger().debug(
+      "Failed to parse Azure CLI pull request payload: %s",
+      (error as Error).message ?? String(error),
+    );
+    return undefined;
+  }
 }
 
 export async function resolveRepositoryIdViaRest(options: CliOptions): Promise<string | undefined> {

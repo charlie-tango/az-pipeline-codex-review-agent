@@ -1,16 +1,15 @@
 parameters:
-  - name: nodeVersion
-    type: string
-    default: "20.x"
   - name: reviewTimeBudget
     type: string
     default: "20"
   - name: dryRun
     type: boolean
     default: false
-  - name: packageVersion
-    type: string
-    default: latest
+  - name: ignoreFiles
+    type: object
+    default:
+      - docs/**
+      - "**/*.md"
 
 stages:
   - stage: CodexReview
@@ -23,8 +22,6 @@ stages:
         steps:
           - task: NodeTool@0
             displayName: Use Node.js
-            inputs:
-              versionSpec: ${{ parameters.nodeVersion }}
 
           - script: |
               set -euxo pipefail
@@ -40,6 +37,7 @@ stages:
               fi
               npx @charlietango/az-pipeline-codex-review-agent@${{ parameters.packageVersion }} \
                 --review-time-budget "$REVIEW_TIME_BUDGET" \
+                --ignore-files '${{ join(parameters.ignoreFiles, "' --ignore-files '") }}' \
                 $ARGS
             displayName: Run Codex review
             env:

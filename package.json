@@ -5,31 +5,37 @@
   "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d",
   "license": "MIT",
   "type": "module",
-  "main": "dist/reviewPr.js",
-  "types": "dist/reviewPr.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "codex-azure-review": "dist/reviewPr.js"
+    "codex-azure-review": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "dev": "pnpm exec tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug",
-    "review:local": "pnpm exec tsx src/reviewPr.ts --diff-file mocks/sample.diff --dry-run --debug",
+    "dev": "pnpm exec tsx src/index.ts --dry-run --debug",
+    "review:local": "pnpm exec tsx src/index.ts --dry-run --debug",
     "lint": "pnpm exec biome check .",
     "prepublishOnly": "pnpm run build",
     "release": "pnpm run lint && pnpm run typecheck && bumpp && pnpm publish --access public",
-    "test": "echo 'No tests defined'",
+    "test": "tsx --test tests/all.test.ts",
     "typecheck": "tsc --noEmit",
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.50.0",
     "azure-devops-node-api": "^15.1.1",
+    "micromatch": "^4.0.5",
+    "simple-git": "^3.21.0",
     "yargs": "^17.7.2",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.7.0",
+    "@types/micromatch": "^4.0.6",
     "@types/node": "^20.12.7",
     "@types/yargs": "^17.0.32",
     "bumpp": "^9.2.0",
@@ -43,7 +49,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "lint-staged": {
-    "*": "pnpm exec biome lint --staged --write --no-errors-on-unmatched"
+    "*": "pnpm exec biome format --staged --write --no-errors-on-unmatched && pnpm exec biome lint --staged --write --no-errors-on-unmatched"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged"

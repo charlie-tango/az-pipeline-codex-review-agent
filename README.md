@@ -1,96 +1,43 @@
 # Codex Azure Review Agent
 
-CLI that diffs a branch, asks Codex for a structured review, and posts summary + inline `suggestion` comments back to Azure DevOps.
-
-[![pkg.pr.new](https://pkg.pr.new/badge/charlie-tango/az-pipeline-codex-agent-review)](https://pkg.pr.new/~/charlie-tango/az-pipeline-codex-agent-review)
-
-## Usage
+Run the reviewer straight from npm with:
 
 ```bash
-pnpm exec codex-azure-review \
-  --target-branch refs/heads/main \
-  --pr-id 123 \
-  --organization https://dev.azure.com/my-org \
-  --project MyProject \
-  --repository MyRepo
+npx @charlietango/az-pipeline-codex-review-agent
 ```
 
-Key flags:
+When run inside an Azure Pipelines PR validation build, the CLI picks up the pull-request ID, organization URL, project, repository, and branch refs from the standard environment variables. It then gathers the diff, asks the Codex agent for a structured review, and posts the summary plus inline suggestions back to Azure DevOps.
 
-- `--diff-file patch.diff` run locally against mocked changes
-- `--review-time-budget 20` remind Codex to wrap within ~20 minutes
-- `--dry-run` only log results; skip Azure comments
+## Prerequisites
 
-Local dry run:
+- Node.js 20+ (matches the runtime used in the Azure Pipelines template).
+- `OPENAI_API_KEY` for the Codex agent, stored as a secure pipeline secret/variable.
+- An Azure DevOps PAT with Code (Read & Write) scope (typically `$(System.AccessToken)`), exported as `AZURE_DEVOPS_PAT` or `SYSTEM_ACCESSTOKEN`.
+- Azure DevOps CLI (`az repos`) installed on the build agent so the reviewer can query PR metadata when a token is available.
 
-```bash
-pnpm run review:local
-```
-
-Simulate the Azure Pipelines job locally:
-
-```bash
-./scripts/run_pipeline_local.sh
-```
-
-Azure Pipelines YAML (`azure-pipelines.yml`) runs the same steps on an agent. Set secrets `OPENAI_API_KEY` and `AZURE_DEVOPS_PAT`, and optionally `REVIEW_TIME_BUDGET`.
-
-### Azure Pipelines template
-
-Copy this minimal pipeline into your project to invoke the included template:
+## Typical Azure Pipelines usage
 
 ```yaml
-extends:
-  template: templates/codex-review.yml
-  parameters:
-    reviewTimeBudget: "20"
-    packageVersion: "latest"
-    dryRun: false
-# grant the System.AccessToken to scripts for Azure DevOps REST access
-# in the pipeline UI: Settings → "Allow scripts to access the OAuth token"
+- script: |
+    set -euxo pipefail
+    npx @charlietango/az-pipeline-codex-review-agent --review-time-budget 20
+  env:
+    OPENAI_API_KEY: $(OPENAI_API_KEY)
+    AZURE_DEVOPS_PAT: $(System.AccessToken)
 ```
 
-Secrets `OPENAI_API_KEY` and `AZURE_DEVOPS_PAT` must be defined in the pipeline. Set `dryRun: true` if you want logs only without posting review comments.
+The CLI auto-detects the PR metadata and source/target branches from Azure DevOps variables. No arguments are required unless you want to override the defaults (for example, rerunning against a different PR).
 
-## Codex contract
+## Helpful flags
 
-Codex returns JSON matching this schema (enforced with Zod):
+- `--dry-run` – output findings without posting any comments.
+- `--ignore-files 'docs/**' --ignore-files '**/*.md'` – exclude matching files from the Codex prompt and from posted comments.
+- `--prompt "Focus on accessibility and performance risks first."` – replace the default agent instruction with a custom one.
 
-```json
-{
-  "summary": "...",
-  "findings": [
-    {
-      "severity": "major",
-      "file": "src/file.ts",
-      "line": 12,
-      "title": "Issue title",
-      "details": "Explanation",
-      "suggestion": {
-        "file": "src/file.ts",
-        "start_line": 10,
-        "end_line": 14,
-        "comment": "Context",
-        "replacement": "New code"
-      }
-    }
-  ],
-  "suggestions": [
-    {
-      "file": "src/file.ts",
-      "start_line": 20,
-      "end_line": 22,
-      "comment": "Context",
-      "replacement": "New code"
-    }
-  ]
-}
-```
+The reviewer tracks the latest commit it has analyzed (via hidden metadata on the overall comment). Subsequent runs only diff against new commits, so Codex focuses on fresh changes rather than re-reporting earlier findings.
+- `--review-time-budget 20` – hint to Codex to prioritize its review within ~20 minutes.
+- `--debug` – enable verbose logs for troubleshooting.
+- `--openai-api-key sk-...` – provide the OpenAI key explicitly when the environment variable is unavailable.
+- `--pr-id 123` (and related flags like `--organization`) – override the detected Azure DevOps context when running outside a PR build (see `AGENTS.md` for limitations).
 
-Each finding suggestion (and top-level suggestion) becomes a PR comment with a `suggestion` block, so fixes can be applied inline.
-
-## Notes
-
-- Requires `OPENAI_API_KEY` (for Codex) and an Azure DevOps PAT (`AZURE_DEVOPS_PAT` or `SYSTEM_ACCESSTOKEN`).
-- Runs as ESM (`moduleResolution: NodeNext`); use `pnpm exec tsx` locally.
-- Biome + husky/lint-staged keep formatting/linting consistent.
+See `npx @charlietango/az-pipeline-codex-review-agent --help` for the full list.

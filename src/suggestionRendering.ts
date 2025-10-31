@@ -82,6 +82,9 @@ export function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): str
       if (trimmed.length === 0) {
         return false;
       }
+      if (shouldPreserveOriginalLine(trimmed, originalLines)) {
+        return true;
+      }
       return !originalLines.some((originalLine) => originalLine.trim() === trimmed.trim());
     });
   const dedupedLines: string[] = [];
@@ -128,6 +131,17 @@ function stripOriginalFragments(line: string, originalLines: readonly string[]):
     return "";
   }
 
+  const trimmedLine = line.trim();
+  for (const original of originalLines) {
+    const trimmedOriginal = original.trim();
+    if (!trimmedOriginal) {
+      continue;
+    }
+    if (trimmedLine === trimmedOriginal) {
+      return isCommentLine(trimmedOriginal) ? line : "";
+    }
+  }
+
   const leadingWhitespace = line.match(/^\s*/u)?.[0] ?? "";
   let content = line.slice(leadingWhitespace.length);
 
@@ -147,4 +161,25 @@ function stripOriginalFragments(line: string, originalLines: readonly string[]):
     return "";
   }
   return `${leadingWhitespace}${content}`;
+}
+
+function shouldPreserveOriginalLine(
+  trimmedLine: string,
+  originalLines: readonly string[],
+): boolean {
+  return originalLines.some((originalLine) => {
+    const trimmedOriginal = originalLine.trim();
+    return trimmedOriginal === trimmedLine && isCommentLine(trimmedOriginal);
+  });
+}
+
+function isCommentLine(value: string): boolean {
+  const normalized = value.trimStart();
+  return (
+    normalized.startsWith("//") ||
+    normalized.startsWith("/*") ||
+    normalized.startsWith("* ") ||
+    normalized === "*" ||
+    normalized.startsWith("*/")
+  );
 }

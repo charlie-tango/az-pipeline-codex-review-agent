@@ -60,3 +60,24 @@ test("sanitizeSuggestionReplacement strips duplicated original fragments embedde
   assert.ok(!sanitized.includes(`theme: "secondary"`));
   assert.ok(sanitized.includes(`theme="secondary"`));
 });
+
+test("sanitizeSuggestionReplacement preserves original comment lines when pairing with new code", () => {
+  const fixture = path.join("tests", "fixtures", "hook.ts");
+  const sanitized = sanitizeSuggestionReplacement({
+    file: fixture,
+    startLine: 1,
+    endLine: 4,
+    comment: "Ensure timeout storage remains environment agnostic",
+    replacement: `/**
+ * @param deps - Dependency array for the effect
+ */
+const timeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+`,
+  });
+
+  assert.ok(sanitized.includes("@param deps"), "Expected JSDoc comment to be preserved");
+  assert.ok(
+    sanitized.includes("const timeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());"),
+    "Expected replacement to include new code line",
+  );
+});

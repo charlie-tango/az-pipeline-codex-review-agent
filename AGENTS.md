@@ -1,5 +1,7 @@
 ## Azure Pipelines Runtime
 
+Markdown formatting in azure devops: https://learn.microsoft.com/en-us/azure/devops/project/wiki/markdown-guidance?view=azure-devops
+
 This reviewer currently targets Azure Pipelines pull-request runs exclusively. The build
 environment is expected to provide:
 
@@ -18,3 +20,16 @@ target branch, the reviewer falls back to `SYSTEM_PULLREQUEST_TARGETBRANCH`.
 Because the tool depends on that hosted agent context, local runs are only reliable when you supply
 the same environment variables yourself. For most scenarios we recommend exercising it through Azure
 Pipelines so the agent can automatically infer the necessary metadata.
+
+### Change Suggestions
+
+Example: Suggest changes in a pull request comment
+This example shows how to suggest code changes on a pull request in the Markdown widget. In this scenario, the code block uses the identifier suggestion:
+
+````
+<!-- ```suggestion   - Three backticks and identifier 'suggestion' -->
+
+for i in range(A, B+100, C):
+
+<!-- ```         - Three backticks -->
+````

@@ -406,7 +406,7 @@ async function gitDiff(options: CliOptions, sinceCommit?: string): Promise<Loade
         baseSha.slice(0, 12),
         sourceSha.slice(0, 12),
       );
-      diffText = await git.diff(["--unified=3", comparisonDescription]);
+      diffText = await git.diff(["--unified=1", comparisonDescription]);
     } else if (trimmed.length > 0 && trimmed !== sourceSha) {
       logger.warn(
         "Previous review commit %s not found locally; falling back to full diff.",
@@ -418,7 +418,7 @@ async function gitDiff(options: CliOptions, sinceCommit?: string): Promise<Loade
   if (!comparisonDescription) {
     comparisonDescription = `${fetchRef}...${sourceRef}`;
     logger.info("Computing git diff %s", comparisonDescription);
-    diffText = await git.diff(["--unified=3", comparisonDescription]);
+    diffText = await git.diff(["--unified=1", comparisonDescription]);
   } else if (!diffText.trim()) {
     logger.info("No changes detected since %s; skipping incremental diff.", baseSha);
   }

@@ -31,7 +31,6 @@ The CLI auto-detects the PR metadata and source/target branches from Azure DevOp
 ## Helpful flags
 
 - `--dry-run` – output findings without posting any comments.
-- `--diff-file mock.diff` – supply a local diff for testing instead of hitting Azure DevOps.
 - `--ignore-files 'docs/**' --ignore-files '**/*.md'` – exclude matching files from the Codex prompt and from posted comments.
 - `--prompt "Focus on accessibility and performance risks first."` – replace the default agent instruction with a custom one.
 
@@ -39,6 +38,6 @@ The reviewer tracks the latest commit it has analyzed (via hidden metadata on th
 - `--review-time-budget 20` – hint to Codex to prioritize its review within ~20 minutes.
 - `--debug` – enable verbose logs for troubleshooting.
 - `--openai-api-key sk-...` – provide the OpenAI key explicitly when the environment variable is unavailable.
-- `--pr-id 123` (and related flags like `--organization`) – override the detected Azure DevOps context when running outside a PR build.
+- `--pr-id 123` (and related flags like `--organization`) – override the detected Azure DevOps context when running outside a PR build (see `AGENTS.md` for limitations).
 
 See `npx @charlietango/az-pipeline-codex-review-agent --help` for the full list.

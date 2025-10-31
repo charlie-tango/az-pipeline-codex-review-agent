@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
 import process from "node:process";
 
 import { type SimpleGit, simpleGit } from "simple-git";
@@ -26,130 +24,58 @@ export type LoadedDiff = {
 export async function loadDiff(options: CliOptions, sinceCommit?: string): Promise<LoadedDiff> {
   const logger = getLogger();
 
-  if (options.diffFile) {
-    const diffPath = path.resolve(options.diffFile);
-    logger.info("Loading diff from", diffPath);
-    if (!existsSync(diffPath)) {
-      throw new ReviewError(`Diff file not found: ${diffPath}`);
-    }
-    const diffText = readFileSync(diffPath, "utf8");
-    return {
-      diffText,
-      sourceRef: "local-diff",
-      sourceSha: "local-diff",
-      targetRef: "local-diff",
-      targetSha: "local-diff",
-      comparisonDescription: "local diff file",
-    };
-  }
-
-  let targetBranch = options.targetBranch;
-  const errors: string[] = [];
-
-  if (options.prId && !targetBranch) {
-    try {
-      const resolved = await resolvePullRequestTargetBranch(options);
-      if (resolved) {
-        targetBranch = resolved;
-        logger.info(
-          "Resolved target branch %s from Azure DevOps for PR #%s",
-          targetBranch,
-          options.prId,
-        );
-      }
-    } catch (error) {
-      const message = (error as Error).message;
-      logger.warn("Failed to resolve target branch from Azure DevOps: %s", message);
-      errors.push(message);
-    }
-  }
-
-  if (!targetBranch) {
-    try {
-      const inferred = await inferTargetBranch(options);
-      if (inferred) {
-        targetBranch = inferred;
-        logger.info("Inferred target branch from repository default: %s", targetBranch);
-      }
-    } catch (error) {
-      const message = (error as Error).message;
-      logger.warn("Failed to infer target branch from repository: %s", message);
-      errors.push(message);
-    }
-  }
-
-  if (targetBranch) {
-    try {
-      return await gitDiff({ ...options, targetBranch }, sinceCommit);
-    } catch (error) {
-      const message = (error as Error).message;
-      logger.warn("git diff failed: %s", message);
-      errors.push(message);
-    }
-  }
-
-  if (errors.length > 0) {
-    throw new ReviewError(`Failed to load pull-request diff: ${errors.join("; ")}`);
-  }
-
-  throw new ReviewError(
-    "No diff source available. Provide --diff-file or ensure PR metadata is accessible.",
+  const targetBranch = await determineTargetBranch(options);
+  logger.info(
+    "Using target branch %s for PR #%s",
+    targetBranch,
+    options.prId ?? "<unknown>",
   );
+
+  try {
+    return await gitDiff(targetBranch, sinceCommit);
+  } catch (error) {
+    const message = (error as Error).message;
+    logger.warn("git diff failed: %s", message);
+    throw new ReviewError(`Failed to load pull-request diff: ${message}`);
+  }
 }
 
-export async function inferTargetBranch(options: CliOptions): Promise<string | undefined> {
-  const envCandidates = [
-    process.env.DEFAULT_BRANCH,
-    process.env.GITHUB_BASE_REF,
-    process.env.BUILD_REPOSITORY_DEFAULT_BRANCH,
-  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+async function determineTargetBranch(options: CliOptions): Promise<string> {
+  const logger = getLogger();
 
-  for (const candidate of envCandidates) {
-    const normalized = normalizeBranchRef(candidate);
+  try {
+    const resolved = await resolvePullRequestTargetBranch(options);
+    const normalized = normalizeBranchRef(resolved);
     if (normalized) {
       return normalized;
     }
+  } catch (error) {
+    logger.warn(
+      "Failed to resolve target branch from Azure DevOps: %s",
+      (error as Error).message,
+    );
   }
 
-  if (options.azureToken) {
-    try {
-      const defaultFromAzure = await resolveDefaultBranchFromAzure(options);
-      if (defaultFromAzure) {
-        return defaultFromAzure;
-      }
-    } catch (error) {
-      getLogger().debug(
-        "Failed to resolve repository default branch from Azure DevOps: %s",
-        (error as Error).message,
-      );
-    }
+  const envTarget = resolveEnvTargetBranch();
+  if (envTarget) {
+    return envTarget;
   }
 
-  const symbolicRef = await tryGetSymbolicRef("refs/remotes/origin/HEAD");
-  if (symbolicRef) {
-    const match = symbolicRef.match(/^refs\/remotes\/origin\/(.+)$/);
-    if (match?.[1]) {
-      return `refs/heads/${match[1]}`;
-    }
-  }
+  throw new ReviewError(
+    "Unable to determine pull-request target branch from Azure DevOps or environment.",
+  );
+}
 
-  const remoteInfo = await tryRemoteShowOrigin();
-  if (remoteInfo) {
-    const headMatch = remoteInfo.match(/HEAD branch: (.+)/);
-    if (headMatch?.[1]) {
-      const branch = headMatch[1].trim();
-      const normalized = normalizeBranchRef(branch);
-      if (normalized) {
-        return normalized;
-      }
-    }
+function resolveEnvTargetBranch(): string | undefined {
+  const candidates = [
+    process.env.SYSTEM_PULLREQUEST_TARGETBRANCH,
+    process.env.BUILD_SOURCEBRANCH,
+  ];
 
-    const masterMatch = remoteInfo.match(/^\s+(?:remotes\/origin\/)?(master|main)\s*$/m);
-    if (masterMatch?.[1]) {
-      const normalized = normalizeBranchRef(masterMatch[1]);
-      if (normalized) {
-        return normalized;
-      }
+  for (const candidate of candidates) {
+    const normalized = normalizeBranchRef(candidate);
+    if (normalized) {
+      return normalized;
     }
   }
 
@@ -171,17 +97,6 @@ function normalizeBranchRef(ref: string | undefined): string | undefined {
     return undefined;
   }
   return `refs/heads/${trimmed.replace(/^origin\//, "")}`;
-}
-
-async function resolveDefaultBranchFromAzure(options: CliOptions): Promise<string | undefined> {
-  const { gitApi } = await ensureGitClient(options);
-  const project = options.project;
-  const repository = options.repository;
-  if (!project || !repository) {
-    return undefined;
-  }
-  const repo = await gitApi.getRepository(repository, project);
-  return repo?.defaultBranch ?? undefined;
 }
 
 export async function resolvePullRequestTargetBranch(
@@ -263,91 +178,11 @@ async function resolvePullRequestTargetBranchWithAzCli(
   }
 }
 
-async function resolveSourceRef(options: CliOptions): Promise<string> {
-  const logger = getLogger();
-  const sourceRef = options.sourceRef;
-
-  if (sourceRef) {
-    const resolved = await resolveExplicitSourceRef(sourceRef);
-    if (resolved) {
-      if (resolved !== sourceRef) {
-        logger.debug("Resolved source ref %s to %s", sourceRef, resolved);
-      }
-      return resolved;
-    }
-    logger.warn(
-      "Configured source ref %s not found locally; falling back to repository HEAD.",
-      sourceRef,
-    );
-  }
-
+async function resolveSourceRef(): Promise<string> {
   if (await refExists("HEAD")) {
     return "HEAD";
   }
   throw new ReviewError("Source ref not available. Ensure the repository has a HEAD commit.");
-}
-
-async function resolveExplicitSourceRef(ref: string): Promise<string | undefined> {
-  if (await refExists(ref)) {
-    return ref;
-  }
-
-  const logger = getLogger();
-  const candidates = new Set<string>();
-  const fetchTargets = new Set<string>();
-
-  if (ref.startsWith("refs/heads/")) {
-    const branch = ref.slice("refs/heads/".length);
-    candidates.add(`refs/remotes/origin/${branch}`);
-    candidates.add(`origin/${branch}`);
-    candidates.add(branch);
-    fetchTargets.add(branch);
-  } else if (ref.startsWith("refs/remotes/origin/")) {
-    const branch = ref.slice("refs/remotes/origin/".length);
-    candidates.add(`origin/${branch}`);
-    candidates.add(`refs/heads/${branch}`);
-    candidates.add(branch);
-    fetchTargets.add(branch);
-  } else if (ref.startsWith("refs/pull/")) {
-    const prBranch = `${ref}`;
-    candidates.add(prBranch);
-    const mergeRef = `${prBranch}/merge`;
-    const headRef = `${prBranch}/head`;
-    candidates.add(mergeRef);
-    candidates.add(headRef);
-    fetchTargets.add(mergeRef);
-    fetchTargets.add(headRef);
-  } else if (ref.startsWith("origin/")) {
-    const branch = ref.slice("origin/".length);
-    candidates.add(`refs/remotes/origin/${branch}`);
-    candidates.add(`refs/heads/${branch}`);
-    candidates.add(branch);
-    fetchTargets.add(branch);
-  }
-
-  for (const target of fetchTargets) {
-    await fetchRemoteTarget(target);
-  }
-
-  for (const candidate of [ref, ...candidates]) {
-    if (await refExists(candidate)) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
-
-async function fetchRemoteTarget(target: string): Promise<void> {
-  try {
-    await git.fetch("origin", target);
-  } catch (error) {
-    getLogger().debug(
-      "Failed to fetch origin/%s: %s",
-      target,
-      (error as Error).message ?? String(error),
-    );
-  }
 }
 
 async function refExists(ref: string): Promise<boolean> {
@@ -362,34 +197,20 @@ async function tryRevParse(...args: string[]): Promise<string | undefined> {
   }
 }
 
-async function tryGetSymbolicRef(ref: string): Promise<string | undefined> {
-  try {
-    return (await git.raw(["symbolic-ref", ref])).trim();
-  } catch {
-    return undefined;
-  }
-}
-
-async function tryRemoteShowOrigin(): Promise<string | undefined> {
-  try {
-    return (await git.raw(["remote", "show", "origin"])).trim();
-  } catch {
-    return undefined;
-  }
-}
-
-async function gitDiff(options: CliOptions, sinceCommit?: string): Promise<LoadedDiff> {
+async function gitDiff(targetBranch: string, sinceCommit?: string): Promise<LoadedDiff> {
   const logger = getLogger();
-  const targetBranch = options.targetBranch ?? "";
   const branchName = targetBranch.startsWith("refs/heads/")
     ? targetBranch.slice("refs/heads/".length)
-    : targetBranch;
+    : targetBranch.replace(/^origin\//, "");
+  if (!branchName) {
+    throw new ReviewError(`Unable to compute branch name from target ref: ${targetBranch}`);
+  }
   const fetchRef = `origin/${branchName}`;
 
   await git.fetch("origin", branchName);
 
   const targetSha = (await git.revparse([fetchRef])).trim();
-  const sourceRef = await resolveSourceRef(options);
+  const sourceRef = await resolveSourceRef();
   const sourceSha = (await git.revparse([sourceRef])).trim();
 
   let diffText = "";

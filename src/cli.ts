@@ -19,9 +19,6 @@ export const ArgsSchema = z.object({
   project: z.string().trim().min(1, "project cannot be empty").optional(),
   repository: z.string().trim().min(1, "repository cannot be empty").optional(),
   repositoryId: z.string().trim().uuid("repository-id must be a valid UUID").optional(),
-  targetBranch: z.string().trim().optional(),
-  sourceRef: z.string().trim().optional(),
-  diffFile: z.string().trim().optional(),
   maxFiles: z.coerce
     .number()
     .int("max-files must be an integer")
@@ -90,23 +87,6 @@ export function parseArgs(): CliOptions {
       type: "string",
       description: "Azure DevOps repository ID.",
       default: process.env.BUILD_REPOSITORY_ID,
-    })
-    .option("target-branch", {
-      type: "string",
-      description: "Target branch for diff comparisons.",
-      default: process.env.SYSTEM_PULLREQUEST_TARGETBRANCH,
-    })
-    .option("source-ref", {
-      type: "string",
-      description: "Source ref for diff comparisons.",
-      default:
-        process.env.SYSTEM_PULLREQUEST_SOURCEBRANCH ??
-        process.env.BUILD_SOURCEBRANCH ??
-        process.env.BUILD_SOURCEVERSION,
-    })
-    .option("diff-file", {
-      type: "string",
-      description: "Path to a diff file for local testing.",
     })
     .option("max-files", {
       type: "number",

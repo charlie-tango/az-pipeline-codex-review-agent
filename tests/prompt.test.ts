@@ -21,7 +21,6 @@ test("assembleReviewPrompt prefixes diff with pull request metadata when availab
   const sections = prompt.split("\n\n---\n\n");
   assert.equal(sections.length, 2, "Expected PR context and diff sections");
   assert.match(sections[0], /Pull request context \(from Azure DevOps, TOON format\):/);
-  assert.match(sections[0], /```toon/);
   assert.match(sections[0], /pullRequest:/);
   assert.match(sections[0], /title: Add timeout hook/);
   assert.match(sections[0], /source: refs\/heads\/feature\/use-timeout/);
@@ -71,6 +70,5 @@ test("assembleReviewPrompt skips metadata section when not available", () => {
   const sections = prompt.split("\n\n---\n\n");
   assert.equal(sections.length, 2, "Expected existing feedback and diff sections only");
   assert.match(sections[0], /Existing PR feedback already posted/);
-  assert.match(sections[0], /```toon/);
   assert.doesNotMatch(sections[0], /Pull request context/);
 });

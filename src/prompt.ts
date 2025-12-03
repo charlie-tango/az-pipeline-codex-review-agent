@@ -5,11 +5,6 @@ const EXISTING_FEEDBACK_HEADER =
   "Existing PR feedback already posted, you MUST NOT report issues that are already covered by existing feedback, if there are no findings then you SHOULD not post at all:";
 const MAX_PR_DESCRIPTION_LENGTH = 2000;
 
-function formatToonBlock(label: string, payload: unknown): string {
-  const toon = encodeToon(payload).trim();
-  return [label, "```toon", toon, "```"].join("\n");
-}
-
 type ExistingFeedbackEntry = {
   location: string;
   startLine: number | null;
@@ -73,8 +68,10 @@ export function buildExistingFeedbackContext(
 
   return [
     EXISTING_FEEDBACK_HEADER,
-    formatToonBlock("Existing feedback context (TOON):", { existingFeedback: feedbackPayload }),
-  ].join("\n\n");
+    "",
+    "Existing feedback context (TOON):",
+    encodeToon({ existingFeedback: feedbackPayload }, { delimiter: "\t" }),
+  ].join("\n");
 }
 
 export function buildPullRequestContext(metadata?: PullRequestMetadata): string | undefined {
@@ -115,9 +112,10 @@ export function buildPullRequestContext(metadata?: PullRequestMetadata): string 
     return undefined;
   }
 
-  return formatToonBlock("Pull request context (from Azure DevOps, TOON format):", {
-    pullRequest: prPayload,
-  });
+  return [
+    "Pull request context (from Azure DevOps, TOON format):",
+    encodeToon({ pullRequest: prPayload }, { delimiter: "\t" }),
+  ].join("\n");
 }
 
 export function assembleReviewPrompt(

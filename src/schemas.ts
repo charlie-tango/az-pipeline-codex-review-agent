@@ -15,8 +15,8 @@ export const SuggestionDetailsSchema = z.object({
 export const SuggestionInstructionSchema = z
   .object({
     file: z.string().min(1, "File path cannot be empty"),
-    start_line: z.number().int().positive("start_line must be a positive integer"),
-    end_line: z.number().int().positive("end_line must be a positive integer"),
+    start_line: z.number().int().min(1, "start_line must be at least 1"),
+    end_line: z.number().int().min(1, "end_line must be at least 1"),
     comment: z.string().min(1, "Comment cannot be empty"),
     replacement: z
       .string()

@@ -20,10 +20,16 @@ test("assembleReviewPrompt prefixes diff with pull request metadata when availab
 
   const sections = prompt.split("\n\n---\n\n");
   assert.equal(sections.length, 2, "Expected PR context and diff sections");
-  assert.match(sections[0], /Pull request context \(from Azure DevOps\):/);
-  assert.match(sections[0], /Title: Add timeout hook/);
-  assert.match(sections[0], /Branches: refs\/heads\/feature\/use-timeout -> refs\/heads\/main/);
-  assert.match(sections[0], /Ensure the hook works in both Node and browser runtimes\./);
+  assert.match(sections[0], /Pull request context \(from Azure DevOps, TOON format\):/);
+  assert.match(sections[0], /```toon/);
+  assert.match(sections[0], /pullRequest:/);
+  assert.match(sections[0], /title: Add timeout hook/);
+  assert.match(sections[0], /source: refs\/heads\/feature\/use-timeout/);
+  assert.match(sections[0], /target: refs\/heads\/main/);
+  assert.match(
+    sections[0],
+    /description: Ensure the hook works in both Node and browser runtimes\./,
+  );
   assert.match(sections[1], /File: src\/hooks\/useTimeout\.ts/);
 });
 
@@ -35,10 +41,15 @@ test("buildPullRequestContext truncates long descriptions", () => {
   });
 
   assert.ok(context, "Expected context to be generated");
-  assert.ok(context?.includes("Description:"));
-  const descriptionLine = context?.split("Description:\n")[1] ?? "";
-  assert.equal(descriptionLine.length, 2001); // 2000 characters plus ellipsis
-  assert.ok(descriptionLine.endsWith("?"));
+  const descriptionLine = context
+    ?.split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("description:"))
+    ?.replace("description:", "")
+    .trim();
+  assert.ok(descriptionLine, "Expected description line in TOON block");
+  assert.equal(descriptionLine?.length, 2001); // 2000 characters plus ellipsis
+  assert.ok(descriptionLine?.endsWith("?"));
 });
 
 test("assembleReviewPrompt skips metadata section when not available", () => {
@@ -60,5 +71,6 @@ test("assembleReviewPrompt skips metadata section when not available", () => {
   const sections = prompt.split("\n\n---\n\n");
   assert.equal(sections.length, 2, "Expected existing feedback and diff sections only");
   assert.match(sections[0], /Existing PR feedback already posted/);
+  assert.match(sections[0], /```toon/);
   assert.doesNotMatch(sections[0], /Pull request context/);
 });

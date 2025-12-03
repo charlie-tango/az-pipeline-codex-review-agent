@@ -1,8 +1,47 @@
+import { encode as encodeToon } from "@toon-format/toon";
 import type { ExistingCommentSummary, PullRequestMetadata } from "./azure.js";
 
 const EXISTING_FEEDBACK_HEADER =
   "Existing PR feedback already posted, you MUST NOT report issues that are already covered by existing feedback, if there are no findings then you SHOULD not post at all:";
 const MAX_PR_DESCRIPTION_LENGTH = 2000;
+
+function formatToonBlock(label: string, payload: unknown): string {
+  const toon = encodeToon(payload).trim();
+  return [label, "```toon", toon, "```"].join("\n");
+}
+
+type ExistingFeedbackEntry = {
+  location: string;
+  startLine: number | null;
+  endLine: number | null;
+  summary: string;
+};
+
+function formatExistingFeedbackEntry(
+  summary: ExistingCommentSummary,
+): ExistingFeedbackEntry | undefined {
+  const location = summary.filePath
+    ? `${summary.filePath}${
+        summary.startLine
+          ? `:${summary.startLine}${
+              summary.endLine && summary.endLine !== summary.startLine ? `-${summary.endLine}` : ""
+            }`
+          : ""
+      }`
+    : "General";
+  const normalized = summary.content.replace(/\s+/g, " ").trim();
+  const truncated = normalized.length > 280 ? `${normalized.slice(0, 277)}?` : normalized;
+  if (truncated.length === 0) {
+    return undefined;
+  }
+
+  return {
+    location,
+    startLine: summary.startLine ?? null,
+    endLine: summary.endLine ?? null,
+    summary: truncated,
+  };
+}
 
 export function buildExistingFeedbackContext(
   summaries: ExistingCommentSummary[],
@@ -15,39 +54,27 @@ export function buildExistingFeedbackContext(
     return undefined;
   }
 
-  const lines: string[] = [];
-  if (lastReviewedSha) {
-    lines.push(`Last reviewed commit: ${lastReviewedSha.slice(0, 12)}`);
-  }
+  const entries = displayable
+    .slice(0, maxEntries)
+    .map((summary) => formatExistingFeedbackEntry(summary))
+    .filter((entry): entry is ExistingFeedbackEntry => Boolean(entry));
+  const feedbackPayload: Record<string, unknown> = {
+    totalEntries: displayable.length,
+    entries,
+  };
 
-  for (const summary of displayable.slice(0, maxEntries)) {
-    const location = summary.filePath
-      ? `${summary.filePath}${
-          summary.startLine
-            ? `:${summary.startLine}${
-                summary.endLine && summary.endLine !== summary.startLine
-                  ? `-${summary.endLine}`
-                  : ""
-              }`
-            : ""
-        }`
-      : "General";
-    const normalized = summary.content.replace(/\s+/g, " ").trim();
-    const truncated = normalized.length > 280 ? `${normalized.slice(0, 277)}?` : normalized;
-    if (truncated.length > 0) {
-      lines.push(`- ${location}: ${truncated}`);
-    }
+  if (lastReviewedSha) {
+    feedbackPayload.lastReviewedCommit = lastReviewedSha;
   }
 
   if (displayable.length > maxEntries) {
-    lines.push(`- ?plus ${displayable.length - maxEntries} more existing comment(s).`);
+    feedbackPayload.omittedEntries = displayable.length - maxEntries;
   }
 
-  if (lines.length === 0) {
-    return undefined;
-  }
-
-  return [EXISTING_FEEDBACK_HEADER, ...lines].join("\n");
+  return [
+    EXISTING_FEEDBACK_HEADER,
+    formatToonBlock("Existing feedback context (TOON):", { existingFeedback: feedbackPayload }),
+  ].join("\n\n");
 }
 
 export function buildPullRequestContext(metadata?: PullRequestMetadata): string | undefined {
@@ -60,15 +87,17 @@ export function buildPullRequestContext(metadata?: PullRequestMetadata): string 
   const source = metadata.sourceRefName?.trim();
   const target = metadata.targetRefName?.trim();
 
-  const sections: string[] = [];
+  const prPayload: Record<string, unknown> = {};
+
   if (title) {
-    sections.push(`Title: ${title}`);
+    prPayload.title = title;
   }
 
   if (source || target) {
-    const sourceLabel = source ?? "<unknown>";
-    const targetLabel = target ?? "<unknown>";
-    sections.push(`Branches: ${sourceLabel} -> ${targetLabel}`);
+    prPayload.branches = {
+      source: source ?? "<unknown>",
+      target: target ?? "<unknown>",
+    };
   }
 
   if (description) {
@@ -78,15 +107,17 @@ export function buildPullRequestContext(metadata?: PullRequestMetadata): string 
         ? `${normalized.slice(0, MAX_PR_DESCRIPTION_LENGTH)}?`
         : normalized;
     if (truncated.length > 0) {
-      sections.push(`Description:\n${truncated}`);
+      prPayload.description = truncated;
     }
   }
 
-  if (sections.length === 0) {
+  if (Object.keys(prPayload).length === 0) {
     return undefined;
   }
 
-  return ["Pull request context (from Azure DevOps):", ...sections].join("\n\n");
+  return formatToonBlock("Pull request context (from Azure DevOps, TOON format):", {
+    pullRequest: prPayload,
+  });
 }
 
 export function assembleReviewPrompt(

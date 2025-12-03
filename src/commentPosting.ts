@@ -2,11 +2,7 @@ import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.j
 
 import { createThreadViaRest } from "./azure.js";
 import type { CliOptions } from "./cli.js";
-import {
-  buildCommentSignature,
-  buildSuggestionSignaturePayload,
-  normalizeThreadFilePath,
-} from "./commentSignatures.js";
+
 import { ReviewError } from "./errors.js";
 import { shouldIgnoreFile } from "./ignore.js";
 import { getLogger } from "./logging.js";
@@ -14,11 +10,15 @@ import { buildFindingsSummary } from "./reviewProcessing.js";
 import { renderSuggestionComment } from "./suggestionRendering.js";
 import type { ReviewResult } from "./types.js";
 
+function normalizeThreadFilePath(file: string): string {
+  const normalized = file.replace(/\\/g, "/").replace(/^\/+/, "");
+  return `/${normalized}`;
+}
+
 export async function postOverallComment(
   options: CliOptions,
   review: ReviewResult,
   repositoryId?: string,
-  existingCommentSignatures?: Set<string>,
   reviewedSourceSha?: string,
 ): Promise<void> {
   const logger = getLogger();
@@ -47,12 +47,6 @@ export async function postOverallComment(
     return;
   }
 
-  const signature = buildCommentSignature({ content: commentText });
-  if (signature && existingCommentSignatures?.has(signature)) {
-    logger.info("Skipping overall comment; identical content already posted.");
-    return;
-  }
-
   const thread: GitInterfaces.GitPullRequestCommentThread = {
     status: GitInterfaces.CommentThreadStatus.Active,
     comments: [
@@ -64,16 +58,12 @@ export async function postOverallComment(
   };
 
   await createThread(options, resolvedRepositoryId, thread);
-  if (signature) {
-    existingCommentSignatures?.add(signature);
-  }
 }
 
 export async function postSuggestions(
   options: CliOptions,
   review: ReviewResult,
   repositoryId?: string,
-  existingCommentSignatures?: Set<string>,
 ): Promise<void> {
   const logger = getLogger();
   if (!options.prId) {
@@ -117,22 +107,6 @@ export async function postSuggestions(
       continue;
     }
 
-    const signature = buildCommentSignature(
-      buildSuggestionSignaturePayload(
-        { ...suggestion, replacement: sanitizedReplacement },
-        suggestionBlock,
-      ),
-    );
-    if (signature && existingCommentSignatures?.has(signature)) {
-      logger.info(
-        "Skipping already-posted suggestion for %s:%s-%s",
-        suggestion.file,
-        suggestion.startLine,
-        suggestion.endLine,
-      );
-      continue;
-    }
-
     const thread: GitInterfaces.GitPullRequestCommentThread = {
       status: GitInterfaces.CommentThreadStatus.Active,
       comments: [
@@ -149,9 +123,6 @@ export async function postSuggestions(
     };
 
     await createThread(options, resolvedRepositoryId, thread);
-    if (signature) {
-      existingCommentSignatures?.add(signature);
-    }
   }
 }
 

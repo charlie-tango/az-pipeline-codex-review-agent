@@ -44,7 +44,6 @@ async function main(): Promise<void> {
   const startTime = Date.now();
   const prefetchResult = await prefetchExistingFeedback(options, logger);
   let existingCommentSummaries = prefetchResult.summaries;
-  const preFetchedSignatures = prefetchResult.preFetchedSignatures;
 
   const previousReviewSha = findLatestReviewedSha(existingCommentSummaries);
   let prMetadata: PullRequestMetadata | undefined;
@@ -98,24 +97,14 @@ async function main(): Promise<void> {
 
     logReview(filteredReview);
 
-    const postingContext = await preparePostingContext(
-      options,
-      preFetchedSignatures,
-      existingCommentSummaries,
-    );
+    const postingContext = await preparePostingContext(options, existingCommentSummaries);
     existingCommentSummaries = postingContext.summaries;
 
-    await postSuggestions(
-      options,
-      filteredReview,
-      postingContext.repositoryId,
-      postingContext.existingCommentSignatures,
-    );
+    await postSuggestions(options, filteredReview, postingContext.repositoryId);
     await postOverallComment(
       options,
       filteredReview,
       postingContext.repositoryId,
-      postingContext.existingCommentSignatures,
       diffInfo.sourceSha,
     );
 
@@ -160,7 +149,6 @@ function findLatestReviewedSha(summaries: ExistingCommentSummary[]): string | un
 
 type PrefetchResult = {
   summaries: ExistingCommentSummary[];
-  preFetchedSignatures?: Set<string>;
 };
 
 async function prefetchExistingFeedback(
@@ -172,7 +160,6 @@ async function prefetchExistingFeedback(
       const existing = await fetchExistingCommentSignatures(options, options.repositoryId);
       return {
         summaries: existing.summaries,
-        preFetchedSignatures: existing.signatures,
       };
     } catch (error) {
       const message = error instanceof ReviewError ? error.message : (error as Error).message;
@@ -180,22 +167,19 @@ async function prefetchExistingFeedback(
     }
   }
 
-  return { summaries: [], preFetchedSignatures: undefined };
+  return { summaries: [] };
 }
 
 type PostingContext = {
   repositoryId?: string;
-  existingCommentSignatures?: Set<string>;
   summaries: ExistingCommentSummary[];
 };
 
 async function preparePostingContext(
   options: CliOptions,
-  preFetchedSignatures: Set<string> | undefined,
   existingCommentSummaries: ExistingCommentSummary[],
 ): Promise<PostingContext> {
   let repositoryId: string | undefined = options.repositoryId;
-  let signatures = preFetchedSignatures ? new Set(preFetchedSignatures) : undefined;
   let summaries = existingCommentSummaries;
 
   if (!options.dryRun && options.prId) {
@@ -204,9 +188,6 @@ async function preparePostingContext(
 
   if (!options.dryRun && options.prId && repositoryId) {
     const existing = await fetchExistingCommentSignatures(options, repositoryId);
-    signatures = signatures
-      ? new Set([...signatures, ...existing.signatures])
-      : existing.signatures;
     if (existing.summaries.length > 0) {
       summaries = existing.summaries;
     }
@@ -214,7 +195,6 @@ async function preparePostingContext(
 
   return {
     repositoryId,
-    existingCommentSignatures: signatures,
     summaries,
   };
 }

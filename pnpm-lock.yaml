@@ -11,9 +11,6 @@ importers:
       '@openai/codex-sdk':
         specifier: ^0.50.0
         version: 0.50.0
-      '@toon-format/toon':
-        specifier: ^2.0.1
-        version: 2.0.1
       azure-devops-node-api:
         specifier: ^15.1.1
         version: 15.1.1
@@ -278,9 +275,6 @@ packages:
   '@openai/codex-sdk@0.50.0':
     resolution: {integrity: sha512-qChQKK0wNOOiPqJ2U+4jP6suWsZeWhH+tVbyZeBzLZrJpsnvyJpAvNSH4jslCj+XQb0Q9yz2y4xgiGUEdF6XBg==}
     engines: {node: '>=18'}
-
-  '@toon-format/toon@2.0.1':
-    resolution: {integrity: sha512-0oohzByDG/VTvsPT7iCfUdoB6yndopkPulh9Kk76fhV6YReVSGqr6ni5EMSxn3umNyfwylI0nOjLYtjJTIiT0w==}
 
   '@types/braces@3.0.5':
     resolution: {integrity: sha512-SQFof9H+LXeWNz8wDe7oN5zu7ket0qwMu5vZubW4GCJ8Kkeh6nBWUz87+KTz/G3Kqsrp0j/W253XJb3KMEeg3w==}
@@ -1020,8 +1014,6 @@ snapshots:
   '@kwsites/promise-deferred@1.1.1': {}
 
   '@openai/codex-sdk@0.50.0': {}
-
-  '@toon-format/toon@2.0.1': {}
 
   '@types/braces@3.0.5': {}
 

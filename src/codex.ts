@@ -51,7 +51,7 @@ export async function callCodex(
     },
     {
       type: "text" as const,
-      text: "When creating suggestions: The `start_line` and `end_line` fields define which lines will be REPLACED. The `replacement` field MUST contain ONLY the new code that will replace those lines. Do NOT include the original code in the replacement field. Think of it as: lines X-Y will be deleted and replaced with your replacement text.",
+      text: "When creating suggestions: The `replacement` field MUST contain ONLY the corrected code - nothing else. Azure DevOps will DELETE lines start_line through end_line and replace them with your replacement text. Do NOT include any original code, context, or explanations in the replacement field. Common mistake: including the last line of the original code at the end of the replacement - don't do this.",
     },
     {
       type: "text" as const,

@@ -9,25 +9,6 @@ import {
 
 const fixturePath = path.join("tests", "fixtures", "sample.ts");
 
-test("renderSuggestionComment removes trailing original block appended by the model", () => {
-  const rendered = renderSuggestionComment({
-    file: fixturePath,
-    startLine: 1,
-    endLine: 3,
-    comment: "Add tracking flag.",
-    replacement: `const isTracked = true;
-export function sample(value: string): string {
-  return value.trim();
-}
-`,
-  });
-
-  assert.ok(rendered, "Expected rendered suggestion");
-  assert.equal(rendered?.sanitizedReplacement, "const isTracked = true;");
-  assert.match(rendered?.body ?? "", /```suggestion/);
-  assert.match(rendered?.body ?? "", /const isTracked = true;/);
-});
-
 test("renderSuggestionComment returns null when replacement is whitespace-only", () => {
   const rendered = renderSuggestionComment({
     file: fixturePath,
@@ -40,7 +21,7 @@ test("renderSuggestionComment returns null when replacement is whitespace-only",
   assert.equal(rendered, null);
 });
 
-test("sanitizeSuggestionReplacement leaves already-clean replacements untouched", () => {
+test("sanitizeSuggestionReplacement leaves clean replacements untouched", () => {
   const sanitized = sanitizeSuggestionReplacement({
     file: fixturePath,
     startLine: 1,
@@ -52,17 +33,14 @@ test("sanitizeSuggestionReplacement leaves already-clean replacements untouched"
   assert.equal(sanitized, "const isTracked = true;");
 });
 
-test("sanitizeSuggestionReplacement removes empty output after stripping original block", () => {
+test("sanitizeSuggestionReplacement normalizes line endings", () => {
   const sanitized = sanitizeSuggestionReplacement({
     file: fixturePath,
     startLine: 1,
     endLine: 3,
-    comment: "Add tracking flag.",
-    replacement: `export function sample(value: string): string {
-  return value.trim();
-}
-`,
+    comment: "Test normalization",
+    replacement: "line1\r\nline2\rline3\n",
   });
 
-  assert.equal(sanitized, "");
+  assert.equal(sanitized, "line1\nline2\nline3");
 });

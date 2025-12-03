@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
-
 import type { ReviewSuggestion } from "./types.js";
 
 export type RenderedSuggestion = {
@@ -47,36 +44,10 @@ export function buildSuggestionContextLines(suggestion: ReviewSuggestion): strin
  * Sanitizes suggestion replacements according to Azure DevOps spec.
  *
  * Azure DevOps treats the suggestion block as the exact replacement for the target lines.
- * We keep sanitization intentionally minimal so behavior stays predictable:
- *   1. Normalize line endings and trim trailing whitespace
- *   2. Remove the exact original block if the model mistakenly appended it
+ * Sanitization is intentionally minimal - only normalize line endings and trim trailing whitespace.
  */
 export function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): string {
-  let normalized = normalizeLineEndings(suggestion.replacement).replace(/\s+$/u, "");
-  if (!normalized) {
-    return normalized;
-  }
-
-  const originalSegment = readOriginalSegment(
-    suggestion.file,
-    suggestion.startLine,
-    suggestion.endLine,
-  );
-  if (!originalSegment) {
-    return normalized;
-  }
-
-  const trimmedOriginal = normalizeLineEndings(originalSegment).trim();
-  if (!trimmedOriginal) {
-    return normalized;
-  }
-
-  const pattern = new RegExp(`${escapeForRegex(trimmedOriginal)}\s*$`, "u");
-  if (pattern.test(normalized)) {
-    const candidate = normalized.replace(pattern, "").trimEnd();
-    normalized = candidate;
-  }
-
+  const normalized = normalizeLineEndings(suggestion.replacement).replace(/\s+$/u, "");
   return normalized;
 }
 
@@ -87,21 +58,4 @@ export function renderReplacementForSuggestion(replacement: string): string {
 
 function normalizeLineEndings(content: string): string {
   return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-function readOriginalSegment(file: string, startLine: number, endLine: number): string | undefined {
-  const absolute = path.resolve(file);
-  if (!existsSync(absolute)) {
-    return undefined;
-  }
-  const content = readFileSync(absolute, "utf8");
-  const lines = content.split(/\r?\n/);
-  if (startLine < 1 || endLine < startLine || startLine > lines.length) {
-    return undefined;
-  }
-  return lines.slice(startLine - 1, Math.min(endLine, lines.length)).join("\n");
-}
-
-function escapeForRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

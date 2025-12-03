@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.50.0",
-    "@toon-format/toon": "^2.0.1",
     "azure-devops-node-api": "^15.1.1",
     "micromatch": "^4.0.5",
     "simple-git": "^3.21.0",

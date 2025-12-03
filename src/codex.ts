@@ -71,10 +71,7 @@ RULES:
 - Do NOT include context lines
 - Choose start_line and end_line to match EXACTLY what needs to change`,
     },
-    {
-      type: "text" as const,
-      text: "Pull request metadata and existing feedback are provided in TOON (Token-Oriented Object Notation) blocks below. Treat TOON exactly like JSON—it encodes the same objects using fewer tokens.",
-    },
+
     {
       type: "text" as const,
       text: prompt,

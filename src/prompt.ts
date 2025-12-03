@@ -1,4 +1,3 @@
-import { encode as encodeToon } from "@toon-format/toon";
 import type { ExistingCommentSummary, PullRequestMetadata } from "./azure.js";
 
 const EXISTING_FEEDBACK_HEADER =
@@ -69,8 +68,8 @@ export function buildExistingFeedbackContext(
   return [
     EXISTING_FEEDBACK_HEADER,
     "",
-    "Existing feedback context (TOON):",
-    encodeToon({ existingFeedback: feedbackPayload }, { delimiter: "\t" }),
+    "Existing feedback context:",
+    JSON.stringify({ existingFeedback: feedbackPayload }, null, 2),
   ].join("\n");
 }
 
@@ -113,8 +112,8 @@ export function buildPullRequestContext(metadata?: PullRequestMetadata): string 
   }
 
   return [
-    "Pull request context (from Azure DevOps, TOON format):",
-    encodeToon({ pullRequest: prPayload }, { delimiter: "\t" }),
+    "Pull request context (from Azure DevOps):",
+    JSON.stringify({ pullRequest: prPayload }, null, 2),
   ].join("\n");
 }
 

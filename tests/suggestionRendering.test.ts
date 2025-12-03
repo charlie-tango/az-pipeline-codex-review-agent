@@ -9,16 +9,16 @@ import {
 
 const fixturePath = path.join("tests", "fixtures", "sample.ts");
 
-test("renderSuggestionComment removes original lines from replacement", () => {
+test("renderSuggestionComment removes trailing original block appended by the model", () => {
   const rendered = renderSuggestionComment({
     file: fixturePath,
     startLine: 1,
     endLine: 3,
     comment: "Add tracking flag.",
-    replacement: `export function sample(value: string): string {
+    replacement: `const isTracked = true;
+export function sample(value: string): string {
   return value.trim();
 }
-const isTracked = true;
 `,
   });
 
@@ -40,44 +40,29 @@ test("renderSuggestionComment returns null when replacement is whitespace-only",
   assert.equal(rendered, null);
 });
 
-test("sanitizeSuggestionReplacement strips duplicated original fragments embedded in new lines", () => {
-  const fixture = path.join("tests", "fixtures", "card.tsx");
+test("sanitizeSuggestionReplacement leaves already-clean replacements untouched", () => {
   const sanitized = sanitizeSuggestionReplacement({
-    file: fixture,
-    startLine: 5,
-    endLine: 12,
-    comment: "Update CTA targets",
-    replacement: `    theme="primary"
-  },
-  {
-    to="/aftaler?kategori=ustoettet"
-    label="unsupported"
-    theme="secondary" theme: "secondary",
-`,
+    file: fixturePath,
+    startLine: 1,
+    endLine: 3,
+    comment: "Add tracking flag.",
+    replacement: "const isTracked = true;",
   });
 
-  assert.ok(sanitized.includes(`theme="primary"`));
-  assert.ok(!sanitized.includes(`theme: "secondary"`));
-  assert.ok(sanitized.includes(`theme="secondary"`));
+  assert.equal(sanitized, "const isTracked = true;");
 });
 
-test("sanitizeSuggestionReplacement preserves original comment lines when pairing with new code", () => {
-  const fixture = path.join("tests", "fixtures", "hook.ts");
+test("sanitizeSuggestionReplacement removes empty output after stripping original block", () => {
   const sanitized = sanitizeSuggestionReplacement({
-    file: fixture,
+    file: fixturePath,
     startLine: 1,
-    endLine: 4,
-    comment: "Ensure timeout storage remains environment agnostic",
-    replacement: `/**
- * @param deps - Dependency array for the effect
- */
-const timeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+    endLine: 3,
+    comment: "Add tracking flag.",
+    replacement: `export function sample(value: string): string {
+  return value.trim();
+}
 `,
   });
 
-  assert.ok(sanitized.includes("@param deps"), "Expected JSDoc comment to be preserved");
-  assert.ok(
-    sanitized.includes("const timeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());"),
-    "Expected replacement to include new code line",
-  );
+  assert.equal(sanitized, "");
 });

@@ -12,13 +12,23 @@ export const SuggestionDetailsSchema = z.object({
   replacement: z.string(),
 });
 
-export const SuggestionInstructionSchema = z.object({
-  file: z.string(),
-  start_line: z.number().int(),
-  end_line: z.number().int(),
-  comment: z.string(),
-  replacement: z.string(),
-});
+export const SuggestionInstructionSchema = z
+  .object({
+    file: z.string().min(1, "File path cannot be empty"),
+    start_line: z.number().int().positive("start_line must be a positive integer"),
+    end_line: z.number().int().positive("end_line must be a positive integer"),
+    comment: z.string().min(1, "Comment cannot be empty"),
+    replacement: z
+      .string()
+      .min(
+        1,
+        "Replacement cannot be empty - it should contain the new code to replace the specified lines",
+      ),
+  })
+  .refine((data) => data.end_line >= data.start_line, {
+    message: "end_line must be greater than or equal to start_line",
+    path: ["end_line"],
+  });
 
 export const FindingInstructionSchema = z.object({
   file: z.string(),
@@ -45,13 +55,18 @@ export const FindingSchema = z
   })
   .passthrough();
 
-export const SuggestionSchema = z.object({
-  file: z.string(),
-  start_line: integerFromString,
-  end_line: integerFromString.optional(),
-  comment: z.string(),
-  replacement: z.string(),
-});
+export const SuggestionSchema = z
+  .object({
+    file: z.string().min(1, "File path cannot be empty"),
+    start_line: integerFromString,
+    end_line: integerFromString.optional(),
+    comment: z.string().min(1, "Comment cannot be empty"),
+    replacement: z.string().min(1, "Replacement cannot be empty"),
+  })
+  .refine((data) => data.end_line === undefined || data.end_line >= data.start_line, {
+    message: "end_line must be greater than or equal to start_line",
+    path: ["end_line"],
+  });
 
 export const ReviewSchema = z.object({
   summary: z.string().optional().default(""),

@@ -51,7 +51,7 @@ export async function callCodex(
     },
     {
       type: "text" as const,
-      text: "When emitting suggestion replacement text, you MUST include only the new lines exactly as they should appear in the file—do not repeat the original/removed code inside the suggestion block.",
+      text: "When creating suggestions: The `start_line` and `end_line` fields define which lines will be REPLACED. The `replacement` field MUST contain ONLY the new code that will replace those lines. Do NOT include the original code in the replacement field. Think of it as: lines X-Y will be deleted and replaced with your replacement text.",
     },
     {
       type: "text" as const,

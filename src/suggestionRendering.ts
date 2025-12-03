@@ -43,6 +43,14 @@ export function buildSuggestionContextLines(suggestion: ReviewSuggestion): strin
   return contextLines;
 }
 
+/**
+ * Sanitizes suggestion replacements according to Azure DevOps spec.
+ *
+ * Azure DevOps treats the suggestion block as the exact replacement for the target lines.
+ * We keep sanitization intentionally minimal so behavior stays predictable:
+ *   1. Normalize line endings and trim trailing whitespace
+ *   2. Remove the exact original block if the model mistakenly appended it
+ */
 export function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): string {
   let normalized = normalizeLineEndings(suggestion.replacement).replace(/\s+$/u, "");
   if (!normalized) {
@@ -63,38 +71,10 @@ export function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): str
     return normalized;
   }
 
-  const pattern = new RegExp(`${escapeForRegex(trimmedOriginal)}\\s*$`, "u");
+  const pattern = new RegExp(`${escapeForRegex(trimmedOriginal)}\s*$`, "u");
   if (pattern.test(normalized)) {
     const candidate = normalized.replace(pattern, "").trimEnd();
-    if (candidate.length > 0) {
-      normalized = candidate;
-    }
-  }
-
-  const originalLines = normalizeLineEndings(trimmedOriginal)
-    .split("\n")
-    .map((line) => line.trimEnd());
-  const sanitizedLines = normalizeLineEndings(normalized).split("\n");
-  const filteredLines = sanitizedLines
-    .map((line) => stripOriginalFragments(line, originalLines))
-    .filter((line) => {
-      const trimmed = line.trimEnd();
-      if (trimmed.length === 0) {
-        return false;
-      }
-      if (shouldPreserveOriginalLine(trimmed, originalLines)) {
-        return true;
-      }
-      return !originalLines.some((originalLine) => originalLine.trim() === trimmed.trim());
-    });
-  const dedupedLines: string[] = [];
-  for (const line of filteredLines) {
-    if (dedupedLines.length === 0 || dedupedLines[dedupedLines.length - 1] !== line) {
-      dedupedLines.push(line);
-    }
-  }
-  if (dedupedLines.length > 0) {
-    normalized = dedupedLines.join("\n").replace(/\s+$/u, "");
+    normalized = candidate;
   }
 
   return normalized;
@@ -124,62 +104,4 @@ function readOriginalSegment(file: string, startLine: number, endLine: number): 
 
 function escapeForRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function stripOriginalFragments(line: string, originalLines: readonly string[]): string {
-  if (!line.trim()) {
-    return "";
-  }
-
-  const trimmedLine = line.trim();
-  for (const original of originalLines) {
-    const trimmedOriginal = original.trim();
-    if (!trimmedOriginal) {
-      continue;
-    }
-    if (trimmedLine === trimmedOriginal) {
-      return isCommentLine(trimmedOriginal) ? line : "";
-    }
-  }
-
-  const leadingWhitespace = line.match(/^\s*/u)?.[0] ?? "";
-  let content = line.slice(leadingWhitespace.length);
-
-  for (const original of originalLines) {
-    const trimmed = original.trim();
-    if (!trimmed) {
-      continue;
-    }
-    const fragmentPattern = new RegExp(`(^|\\s)${escapeForRegex(trimmed)}(?=\\s|$|,|;|\\))`, "gu");
-    content = content.replace(fragmentPattern, (match, prefix) => {
-      return prefix ?? "";
-    });
-  }
-
-  content = content.replace(/\s{2,}/gu, " ").trim();
-  if (!content) {
-    return "";
-  }
-  return `${leadingWhitespace}${content}`;
-}
-
-function shouldPreserveOriginalLine(
-  trimmedLine: string,
-  originalLines: readonly string[],
-): boolean {
-  return originalLines.some((originalLine) => {
-    const trimmedOriginal = originalLine.trim();
-    return trimmedOriginal === trimmedLine && isCommentLine(trimmedOriginal);
-  });
-}
-
-function isCommentLine(value: string): boolean {
-  const normalized = value.trimStart();
-  return (
-    normalized.startsWith("//") ||
-    normalized.startsWith("/*") ||
-    normalized.startsWith("* ") ||
-    normalized === "*" ||
-    normalized.startsWith("*/")
-  );
 }

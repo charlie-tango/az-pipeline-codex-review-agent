@@ -71,6 +71,15 @@ export function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): str
       .map((line) => line.trim());
     const replacementLines = normalized.split("\n");
 
+    console.error(
+      `[DEBUG] Suggestion for ${suggestion.file}:${suggestion.startLine}-${suggestion.endLine}`,
+    );
+    console.error(`[DEBUG] Original lines (${originalLines.length}):`, originalLines);
+    console.error(
+      `[DEBUG] Replacement lines (${replacementLines.length}):`,
+      replacementLines.map((l) => l.trim()),
+    );
+
     // Remove trailing lines from replacement that match any original line
     let trimCount = 0;
     for (let i = replacementLines.length - 1; i >= 0; i--) {
@@ -81,6 +90,8 @@ export function sanitizeSuggestionReplacement(suggestion: ReviewSuggestion): str
         break;
       }
     }
+
+    console.error(`[DEBUG] Trim count: ${trimCount}`);
 
     if (trimCount > 0 && trimCount < replacementLines.length) {
       normalized = replacementLines.slice(0, replacementLines.length - trimCount).join("\n");

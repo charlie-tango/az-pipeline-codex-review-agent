@@ -51,7 +51,25 @@ export async function callCodex(
     },
     {
       type: "text" as const,
-      text: "When creating suggestions: The `replacement` field MUST contain ONLY the corrected code - nothing else. Azure DevOps will DELETE lines start_line through end_line and replace them with your replacement text. Do NOT include any original code, context, or explanations in the replacement field. Common mistake: including the last line of the original code at the end of the replacement - don't do this.",
+      text: `CRITICAL - Azure DevOps Suggestion Format:
+
+The replacement field works like this:
+1. Azure DevOps will DELETE lines start_line through end_line from the file
+2. Azure DevOps will INSERT your replacement text at that location
+3. Your replacement must contain ONLY the new/corrected code - nothing else
+
+Example from Azure DevOps documentation:
+Original code (line 5):     for i in range(A, B, C):
+Suggestion (replacement):   for i in range(A, B+100, C):
+Result: Line 5 gets replaced with the suggestion
+
+RULES:
+- replacement = ONLY the corrected/new code to insert
+- Do NOT include unchanged lines before or after
+- Do NOT include the original buggy code
+- Do NOT include explanations or comments
+- Do NOT include context lines
+- Choose start_line and end_line to match EXACTLY what needs to change`,
     },
     {
       type: "text" as const,

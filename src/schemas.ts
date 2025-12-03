@@ -15,14 +15,24 @@ export const SuggestionDetailsSchema = z.object({
 export const SuggestionInstructionSchema = z
   .object({
     file: z.string().min(1, "File path cannot be empty"),
-    start_line: z.number().int().min(1, "start_line must be at least 1"),
-    end_line: z.number().int().min(1, "end_line must be at least 1"),
-    comment: z.string().min(1, "Comment cannot be empty"),
+    start_line: z
+      .number()
+      .int()
+      .min(1)
+      .describe("First line number to replace. Example: if line 5 needs fixing, start_line=5"),
+    end_line: z
+      .number()
+      .int()
+      .min(1)
+      .describe(
+        "Last line number to replace (inclusive). Example: to replace only line 5, end_line=5",
+      ),
+    comment: z.string().min(1).describe("Explanation of the issue and why the suggestion fixes it"),
     replacement: z
       .string()
-      .min(
-        1,
-        "Replacement cannot be empty - it should contain the new code to replace the specified lines",
+      .min(1)
+      .describe(
+        "The exact corrected code that will replace lines start_line through end_line. Example: if original line 5 is 'for i in range(A, B, C):' and you want to change it to 'for i in range(A, B+100, C):', then replacement should ONLY contain 'for i in range(A, B+100, C):' - nothing else, no context, no original code.",
       ),
   })
   .refine((data) => data.end_line >= data.start_line, {

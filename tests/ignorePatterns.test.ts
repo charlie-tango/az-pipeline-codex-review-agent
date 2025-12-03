@@ -67,147 +67,147 @@ index 6666666..7777777 100644
  ### Running tests`;
 
 test("shouldIgnoreFile matches test files with **/*.test.ts pattern", () => {
-	const result = shouldIgnoreFile("tests/math.test.ts", ["**/*.test.ts"]);
-	assert.equal(result, true);
+  const result = shouldIgnoreFile("tests/math.test.ts", ["**/*.test.ts"]);
+  assert.equal(result, true);
 });
 
 test("shouldIgnoreFile matches documentation with docs/** pattern", () => {
-	const result = shouldIgnoreFile("docs/usage.md", ["docs/**"]);
-	assert.equal(result, true);
+  const result = shouldIgnoreFile("docs/usage.md", ["docs/**"]);
+  assert.equal(result, true);
 });
 
 test("shouldIgnoreFile does not match source files with test pattern", () => {
-	const result = shouldIgnoreFile("src/utils/math.ts", ["**/*.test.ts"]);
-	assert.equal(result, false);
+  const result = shouldIgnoreFile("src/utils/math.ts", ["**/*.test.ts"]);
+  assert.equal(result, false);
 });
 
 test("shouldIgnoreFile returns false when no patterns provided", () => {
-	const result = shouldIgnoreFile("src/utils/math.ts", undefined);
-	assert.equal(result, false);
+  const result = shouldIgnoreFile("src/utils/math.ts", undefined);
+  assert.equal(result, false);
 });
 
 test("shouldIgnoreFile returns false when empty patterns array", () => {
-	const result = shouldIgnoreFile("src/utils/math.ts", []);
-	assert.equal(result, false);
+  const result = shouldIgnoreFile("src/utils/math.ts", []);
+  assert.equal(result, false);
 });
 
 test("shouldIgnoreFile matches with multiple patterns", () => {
-	const patterns = ["**/*.test.ts", "docs/**", "**/*.md"];
-	assert.equal(shouldIgnoreFile("tests/math.test.ts", patterns), true);
-	assert.equal(shouldIgnoreFile("docs/usage.md", patterns), true);
-	assert.equal(shouldIgnoreFile("README.md", patterns), true);
-	assert.equal(shouldIgnoreFile("src/utils/math.ts", patterns), false);
+  const patterns = ["**/*.test.ts", "docs/**", "**/*.md"];
+  assert.equal(shouldIgnoreFile("tests/math.test.ts", patterns), true);
+  assert.equal(shouldIgnoreFile("docs/usage.md", patterns), true);
+  assert.equal(shouldIgnoreFile("README.md", patterns), true);
+  assert.equal(shouldIgnoreFile("src/utils/math.ts", patterns), false);
 });
 
 test("shouldIgnoreFile normalizes paths with leading ./ prefix", () => {
-	const result = shouldIgnoreFile("./tests/math.test.ts", ["tests/**"]);
-	assert.equal(result, true);
+  const result = shouldIgnoreFile("./tests/math.test.ts", ["tests/**"]);
+  assert.equal(result, true);
 });
 
 test("shouldIgnoreFile normalizes backslash paths to forward slashes", () => {
-	const result = shouldIgnoreFile("tests\\math.test.ts", ["tests/**"]);
-	assert.equal(result, true);
+  const result = shouldIgnoreFile("tests\\math.test.ts", ["tests/**"]);
+  assert.equal(result, true);
 });
 
 test("filterFileDiffs excludes test files from parsed diff", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
-	assert.equal(fileDiffs.length, 4);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  assert.equal(fileDiffs.length, 4);
 
-	const filtered = filterFileDiffs(fileDiffs, ["**/*.test.ts"]);
-	assert.equal(filtered.length, 3);
+  const filtered = filterFileDiffs(fileDiffs, ["**/*.test.ts"]);
+  assert.equal(filtered.length, 3);
 
-	const paths = filtered.map((f) => f.path);
-	assert.deepEqual(paths, ["src/utils/math.ts", "src/api/userService.ts", "docs/usage.md"]);
+  const paths = filtered.map((f) => f.path);
+  assert.deepEqual(paths, ["src/utils/math.ts", "src/api/userService.ts", "docs/usage.md"]);
 });
 
 test("filterFileDiffs excludes documentation from parsed diff", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, ["docs/**", "**/*.md"]);
-	assert.equal(filtered.length, 3);
+  const filtered = filterFileDiffs(fileDiffs, ["docs/**", "**/*.md"]);
+  assert.equal(filtered.length, 3);
 
-	const paths = filtered.map((f) => f.path);
-	assert.deepEqual(paths, ["src/utils/math.ts", "src/api/userService.ts", "tests/math.test.ts"]);
+  const paths = filtered.map((f) => f.path);
+  assert.deepEqual(paths, ["src/utils/math.ts", "src/api/userService.ts", "tests/math.test.ts"]);
 });
 
 test("filterFileDiffs excludes multiple patterns from parsed diff", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, ["**/*.test.ts", "docs/**", "**/*.md"]);
-	assert.equal(filtered.length, 2);
+  const filtered = filterFileDiffs(fileDiffs, ["**/*.test.ts", "docs/**", "**/*.md"]);
+  assert.equal(filtered.length, 2);
 
-	const paths = filtered.map((f) => f.path);
-	assert.deepEqual(paths, ["src/utils/math.ts", "src/api/userService.ts"]);
+  const paths = filtered.map((f) => f.path);
+  assert.deepEqual(paths, ["src/utils/math.ts", "src/api/userService.ts"]);
 });
 
 test("filterFileDiffs excludes specific file path", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, ["src/api/userService.ts"]);
-	assert.equal(filtered.length, 3);
+  const filtered = filterFileDiffs(fileDiffs, ["src/api/userService.ts"]);
+  assert.equal(filtered.length, 3);
 
-	const paths = filtered.map((f) => f.path);
-	assert.equal(paths.includes("src/api/userService.ts"), false);
+  const paths = filtered.map((f) => f.path);
+  assert.equal(paths.includes("src/api/userService.ts"), false);
 });
 
 test("filterFileDiffs excludes entire directory with pattern", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, ["tests/**"]);
-	assert.equal(filtered.length, 3);
+  const filtered = filterFileDiffs(fileDiffs, ["tests/**"]);
+  assert.equal(filtered.length, 3);
 
-	const paths = filtered.map((f) => f.path);
-	assert.equal(paths.includes("tests/math.test.ts"), false);
+  const paths = filtered.map((f) => f.path);
+  assert.equal(paths.includes("tests/math.test.ts"), false);
 });
 
 test("filterFileDiffs returns all diffs when no patterns provided", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, undefined);
-	assert.equal(filtered.length, 4);
+  const filtered = filterFileDiffs(fileDiffs, undefined);
+  assert.equal(filtered.length, 4);
 });
 
 test("filterFileDiffs returns all diffs when empty patterns array", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, []);
-	assert.equal(filtered.length, 4);
+  const filtered = filterFileDiffs(fileDiffs, []);
+  assert.equal(filtered.length, 4);
 });
 
 test("filterFileDiffs preserves diff content for non-ignored files", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, ["**/*.test.ts", "docs/**", "**/*.md"]);
-	assert.equal(filtered.length, 2);
+  const filtered = filterFileDiffs(fileDiffs, ["**/*.test.ts", "docs/**", "**/*.md"]);
+  assert.equal(filtered.length, 2);
 
-	const mathFile = filtered.find((f) => f.path === "src/utils/math.ts");
-	assert.ok(mathFile);
-	assert.ok(mathFile.diff.includes("export function average"));
-	assert.ok(mathFile.diff.includes("Math.round"));
+  const mathFile = filtered.find((f) => f.path === "src/utils/math.ts");
+  assert.ok(mathFile);
+  assert.ok(mathFile.diff.includes("export function average"));
+  assert.ok(mathFile.diff.includes("Math.round"));
 });
 
 test("filterFileDiffs excludes files matching glob star patterns", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, ["**/userService.ts"]);
-	assert.equal(filtered.length, 3);
+  const filtered = filterFileDiffs(fileDiffs, ["**/userService.ts"]);
+  assert.equal(filtered.length, 3);
 
-	const paths = filtered.map((f) => f.path);
-	assert.equal(paths.includes("src/api/userService.ts"), false);
+  const paths = filtered.map((f) => f.path);
+  assert.equal(paths.includes("src/api/userService.ts"), false);
 });
 
 test("filterFileDiffs handles complex nested patterns", () => {
-	const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
+  const fileDiffs = parseUnifiedDiff(SAMPLE_DIFF);
 
-	const filtered = filterFileDiffs(fileDiffs, ["src/api/**"]);
-	assert.equal(filtered.length, 3);
+  const filtered = filterFileDiffs(fileDiffs, ["src/api/**"]);
+  assert.equal(filtered.length, 3);
 
-	const paths = filtered.map((f) => f.path);
-	assert.equal(paths.includes("src/api/userService.ts"), false);
-	assert.equal(paths.includes("src/utils/math.ts"), true);
+  const paths = filtered.map((f) => f.path);
+  assert.equal(paths.includes("src/api/userService.ts"), false);
+  assert.equal(paths.includes("src/utils/math.ts"), true);
 });
 
 test("shouldIgnoreFile matches dot files when dot option is enabled", () => {
-	const result = shouldIgnoreFile(".github/workflows/ci.yml", [".github/**"]);
-	assert.equal(result, true);
+  const result = shouldIgnoreFile(".github/workflows/ci.yml", [".github/**"]);
+  assert.equal(result, true);
 });

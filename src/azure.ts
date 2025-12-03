@@ -3,8 +3,8 @@ import type { IGitApi } from "azure-devops-node-api/GitApi.js";
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
 import type { CliOptions } from "./cli.js";
-import { buildCommentSignature, normalizeThreadFilePath } from "./commentSignatures.js";
 import { runCommand } from "./command.js";
+import { buildCommentSignature, normalizeThreadFilePath } from "./commentSignatures.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
 
@@ -259,10 +259,7 @@ export async function fetchExistingCommentSignatures(
       recordThreadSignatures(thread, signatures, summaries);
     }
   } catch (error) {
-    getLogger().warn(
-      "Failed to fetch existing threads via REST API: %s",
-      (error as Error).message,
-    );
+    getLogger().warn("Failed to fetch existing threads via REST API: %s", (error as Error).message);
   }
 
   return { signatures, summaries };
@@ -453,7 +450,9 @@ export async function resolveRepositoryIdViaRest(options: CliOptions): Promise<s
 
   const payload = (await response.json()) as { id?: string };
   if (!payload?.id) {
-    throw new ReviewError(`Azure DevOps REST repository lookup did not return an ID for ${options.repository}`);
+    throw new ReviewError(
+      `Azure DevOps REST repository lookup did not return an ID for ${options.repository}`,
+    );
   }
   return payload.id;
 }

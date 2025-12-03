@@ -2,7 +2,7 @@ import process from "node:process";
 
 import { type SimpleGit, simpleGit } from "simple-git";
 
-import { fetchPullRequestMetadata, type PullRequestMetadata } from "./azure.js";
+import { type PullRequestMetadata, fetchPullRequestMetadata } from "./azure.js";
 import type { CliOptions } from "./cli.js";
 import { ReviewError } from "./errors.js";
 import { getLogger } from "./logging.js";
@@ -28,11 +28,7 @@ export async function loadDiff(
   const logger = getLogger();
 
   const targetBranch = await determineTargetBranch(options, prMetadata);
-  logger.info(
-    "Using target branch %s for PR #%s",
-    targetBranch,
-    options.prId ?? "<unknown>",
-  );
+  logger.info("Using target branch %s for PR #%s", targetBranch, options.prId ?? "<unknown>");
 
   try {
     return await gitDiff(targetBranch, sinceCommit);
@@ -61,10 +57,7 @@ async function determineTargetBranch(
       return normalized;
     }
   } catch (error) {
-    logger.warn(
-      "Failed to resolve target branch from Azure DevOps: %s",
-      (error as Error).message,
-    );
+    logger.warn("Failed to resolve target branch from Azure DevOps: %s", (error as Error).message);
   }
 
   const envTarget = resolveEnvTargetBranch();
@@ -78,10 +71,7 @@ async function determineTargetBranch(
 }
 
 function resolveEnvTargetBranch(): string | undefined {
-  const candidates = [
-    process.env.SYSTEM_PULLREQUEST_TARGETBRANCH,
-    process.env.BUILD_SOURCEBRANCH,
-  ];
+  const candidates = [process.env.SYSTEM_PULLREQUEST_TARGETBRANCH, process.env.BUILD_SOURCEBRANCH];
 
   for (const candidate of candidates) {
     const normalized = normalizeBranchRef(candidate);

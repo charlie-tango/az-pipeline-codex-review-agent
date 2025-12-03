@@ -6,9 +6,9 @@ import process from "node:process";
 
 import {
   type ExistingCommentSummary,
+  type PullRequestMetadata,
   fetchExistingCommentSignatures,
   fetchPullRequestMetadata,
-  type PullRequestMetadata,
   resolveRepositoryIdViaRest,
 } from "./azure.js";
 import { type CliOptions, parseArgs, redactOptions } from "./cli.js";

@@ -3,30 +3,11 @@ export interface FileDiff {
   diff: string;
 }
 
-export interface ReviewSuggestion {
-  file: string;
-  startLine: number;
-  endLine: number;
-  comment: string;
-  replacement: string;
-  originFinding?: {
-    title?: string;
-    details?: string;
-  };
-}
-
 export interface Finding {
   file?: string;
   line?: number;
   title?: string;
   details?: string;
-  suggestion?: {
-    file?: string;
-    start_line: number;
-    end_line?: number;
-    comment: string;
-    replacement: string;
-  } | null;
   // Allow additional model-supplied metadata.
   [key: string]: unknown;
 }
@@ -34,5 +15,4 @@ export interface Finding {
 export interface ReviewResult {
   summary: string;
   findings: Finding[];
-  suggestions: ReviewSuggestion[];
 }

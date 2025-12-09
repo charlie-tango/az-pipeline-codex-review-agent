@@ -6,7 +6,7 @@ Run the reviewer straight from npm with:
 npx @charlietango/az-pipeline-codex-review-agent
 ```
 
-When run inside an Azure Pipelines PR validation build, the CLI picks up the pull-request ID, organization URL, project, repository, and branch refs from the standard environment variables. It then gathers the diff, asks the Codex agent for a structured review, and posts the summary plus inline suggestions back to Azure DevOps.
+When run inside an Azure Pipelines PR validation build, the CLI picks up the pull-request ID, organization URL, project, repository, and branch refs from the standard environment variables. It then gathers the diff, asks the Codex agent for a structured review, and posts a single summary back to Azure DevOps.
 
 ## Prerequisites
 

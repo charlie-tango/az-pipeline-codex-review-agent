@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { parseReview } from "../src/reviewProcessing.js";
 
-test("parseReview deduplicates duplicate suggestions and trims content", () => {
+test("parseReview trims summary and preserves findings", () => {
   const raw = JSON.stringify({
     summary: " Automated summary ",
     findings: [
@@ -12,69 +12,39 @@ test("parseReview deduplicates duplicate suggestions and trims content", () => {
         line: 10,
         title: "Missing guard",
         details: "Handle undefined input.",
-        suggestion: {
-          file: "src/a.ts",
-          start_line: 10,
-          end_line: 11,
-          comment: "Add guard clause.",
-          replacement: "if (!value) {\n  return;\n}\n",
-        },
-      },
-    ],
-    suggestions: [
-      {
-        file: "src/a.ts",
-        start_line: 10,
-        end_line: 11,
-        comment: "Add guard clause.",
-        replacement: "if (!value) {\n  return;\n}\n",
+        severity: "high",
       },
     ],
   });
 
   const review = parseReview(raw);
   assert.equal(review.summary, "Automated summary");
-  assert.equal(review.suggestions.length, 1);
-  const suggestion = review.suggestions[0];
-  assert.equal(suggestion.file, "src/a.ts");
-  assert.equal(suggestion.startLine, 10);
-  assert.equal(suggestion.endLine, 11);
-  assert.equal(suggestion.comment, "Add guard clause.");
-  assert.equal(suggestion.replacement, "if (!value) {\n  return;\n}");
-  assert.equal(suggestion.originFinding, undefined);
+  assert.equal(review.findings.length, 1);
+  const finding = review.findings[0];
+  assert.equal(finding.file, "src/a.ts");
+  assert.equal(finding.line, 10);
+  assert.equal(finding.title, "Missing guard");
+  assert.equal(finding.details, "Handle undefined input.");
+  assert.equal(finding.severity, "high");
 });
 
-test("parseReview fills missing suggestion fields from finding context", () => {
+test("parseReview tolerates missing optional finding fields", () => {
   const raw = JSON.stringify({
     summary: "",
     findings: [
       {
         file: "src/b.ts",
         line: 5,
-        title: "Title",
-        details: "Details",
-        suggestion: {
-          file: "src/b.ts",
-          start_line: 5,
-          comment: "Use strict equality",
-          replacement: "if (value === expected) {\n  return true;\n}",
-        },
       },
     ],
-    suggestions: [],
   });
 
   const review = parseReview(raw);
   assert.equal(review.summary, "");
-  assert.equal(review.suggestions.length, 1);
-  const suggestion = review.suggestions[0];
-  assert.equal(suggestion.file, "src/b.ts");
-  assert.equal(suggestion.startLine, 5);
-  assert.equal(suggestion.endLine, 5);
-  assert.equal(suggestion.comment, "Use strict equality");
-  assert.equal(suggestion.replacement, "if (value === expected) {\n  return true;\n}");
-  assert.deepEqual(suggestion.originFinding, {
-    title: "Title",
-    details: "Details",
-  });
+  assert.equal(review.findings.length, 1);
+  const finding = review.findings[0];
+  assert.equal(finding.file, "src/b.ts");
+  assert.equal(finding.line, 5);
+  assert.equal(finding.title, undefined);
+  assert.equal(finding.details, undefined);
 });

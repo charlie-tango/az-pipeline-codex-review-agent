@@ -13,7 +13,7 @@ import {
 } from "./azure.js";
 import { type CliOptions, parseArgs, redactOptions } from "./cli.js";
 import { callCodex } from "./codex.js";
-import { postOverallComment, postSuggestions } from "./commentPosting.js";
+import { postOverallComment } from "./commentPosting.js";
 import { ReviewError } from "./errors.js";
 import { type LoadedDiff, buildPrompt, loadDiff, parseUnifiedDiff, truncateFiles } from "./git.js";
 import { filterFileDiffs } from "./ignore.js";
@@ -100,7 +100,6 @@ async function main(): Promise<void> {
     const postingContext = await preparePostingContext(options, existingCommentSummaries);
     existingCommentSummaries = postingContext.summaries;
 
-    await postSuggestions(options, filteredReview, postingContext.repositoryId);
     await postOverallComment(
       options,
       filteredReview,

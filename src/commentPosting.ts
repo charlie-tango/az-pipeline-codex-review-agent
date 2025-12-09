@@ -4,16 +4,9 @@ import { createThreadViaRest } from "./azure.js";
 import type { CliOptions } from "./cli.js";
 
 import { ReviewError } from "./errors.js";
-import { shouldIgnoreFile } from "./ignore.js";
 import { getLogger } from "./logging.js";
 import { buildFindingsSummary } from "./reviewProcessing.js";
-import { renderSuggestionComment } from "./suggestionRendering.js";
 import type { ReviewResult } from "./types.js";
-
-function normalizeThreadFilePath(file: string): string {
-  const normalized = file.replace(/\\/g, "/").replace(/^\/+/, "");
-  return `/${normalized}`;
-}
 
 export async function postOverallComment(
   options: CliOptions,
@@ -58,72 +51,6 @@ export async function postOverallComment(
   };
 
   await createThread(options, resolvedRepositoryId, thread);
-}
-
-export async function postSuggestions(
-  options: CliOptions,
-  review: ReviewResult,
-  repositoryId?: string,
-): Promise<void> {
-  const logger = getLogger();
-  if (!options.prId) {
-    logger.info("No pull request ID detected; skipping inline suggestion threads.");
-    return;
-  }
-  if (review.suggestions.length === 0) {
-    logger.info("No suggestions to post.");
-    return;
-  }
-
-  const resolvedRepositoryId = repositoryId ?? options.repositoryId;
-  if (!resolvedRepositoryId) {
-    logger.warn(
-      "Repository ID unavailable; skipping inline suggestion threads. Provide --repository-id or ensure PAT access.",
-    );
-    return;
-  }
-
-  for (const suggestion of review.suggestions) {
-    if (shouldIgnoreFile(suggestion.file, options.ignoreFiles)) {
-      logger.debug("Skipping suggestion for ignored file %s", suggestion.file);
-      continue;
-    }
-    const rendered = renderSuggestionComment(suggestion);
-    if (!rendered) {
-      logger.debug(
-        "Skipping suggestion with empty replacement for %s:%s-%s",
-        suggestion.file,
-        suggestion.startLine,
-        suggestion.endLine,
-      );
-      continue;
-    }
-    const { body: suggestionBlock, sanitizedReplacement } = rendered;
-
-    if (options.dryRun) {
-      logger.info(
-        `Dry-run: would post suggestion to ${suggestion.file}:${suggestion.startLine}-${suggestion.endLine}\n${suggestionBlock}`,
-      );
-      continue;
-    }
-
-    const thread: GitInterfaces.GitPullRequestCommentThread = {
-      status: GitInterfaces.CommentThreadStatus.Active,
-      comments: [
-        {
-          content: suggestionBlock,
-          commentType: GitInterfaces.CommentType.Text,
-        },
-      ],
-      threadContext: {
-        filePath: normalizeThreadFilePath(suggestion.file),
-        rightFileStart: { line: suggestion.startLine, offset: 1 },
-        rightFileEnd: { line: suggestion.endLine, offset: 1 },
-      },
-    };
-
-    await createThread(options, resolvedRepositoryId, thread);
-  }
 }
 
 async function createThread(

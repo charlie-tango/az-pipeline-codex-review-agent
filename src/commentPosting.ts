@@ -1,6 +1,6 @@
 import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
-import { createThreadViaRest } from "./azure.js";
+import { type ExistingCommentSummary, createThreadViaRest } from "./azure.js";
 import type { CliOptions } from "./cli.js";
 
 import { ReviewError } from "./errors.js";
@@ -13,12 +13,28 @@ export async function postOverallComment(
   review: ReviewResult,
   repositoryId?: string,
   reviewedSourceSha?: string,
+  existingComments?: ExistingCommentSummary[],
 ): Promise<void> {
   const logger = getLogger();
   if (!options.prId) {
     logger.info("No pull request ID detected; skipping overall review comment.");
     return;
   }
+
+  // Check if we already posted a comment for this exact SHA
+  if (reviewedSourceSha && existingComments) {
+    const alreadyReviewed = existingComments.some(
+      (comment) => comment.reviewHeadSha === reviewedSourceSha,
+    );
+    if (alreadyReviewed) {
+      logger.info(
+        "A review comment for commit %s already exists; skipping duplicate comment.",
+        reviewedSourceSha.slice(0, 12),
+      );
+      return;
+    }
+  }
+
   const contentLines: string[] = [review.summary || "Automated review completed."];
   if (review.findings.length > 0) {
     contentLines.push("", "### Findings", ...buildFindingsSummary(review.findings));

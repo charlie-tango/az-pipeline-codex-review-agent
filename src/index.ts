@@ -105,6 +105,7 @@ async function main(): Promise<void> {
       filteredReview,
       postingContext.repositoryId,
       diffInfo.sourceSha,
+      existingCommentSummaries,
     );
 
     const elapsedMs = Date.now() - startTime;

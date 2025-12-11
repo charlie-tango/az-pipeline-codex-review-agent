@@ -33,6 +33,7 @@ The CLI auto-detects the PR metadata and source/target branches from Azure DevOp
 - `--dry-run` – output findings without posting any comments.
 - `--ignore-files 'docs/**' --ignore-files '**/*.md'` – exclude matching files from the Codex prompt and from posted comments.
 - `--prompt "Focus on accessibility and performance risks first."` – replace the default agent instruction with a custom one.
+- `--lix-complexity 40` – target a specific LIX readability score (20-80) for review comments. Lower values (20-30) request simpler language suitable for general audiences, while higher values (50-60+) allow more technical complexity. Omit to use the agent's default writing style.
 
 The reviewer tracks the latest commit it has analyzed (via hidden metadata on the overall comment). Subsequent runs only diff against new commits, so Codex focuses on fresh changes rather than re-reporting earlier findings.
 - `--review-time-budget 20` – hint to Codex to prioritize its review within ~20 minutes.

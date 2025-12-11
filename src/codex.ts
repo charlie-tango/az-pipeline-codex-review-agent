@@ -12,6 +12,7 @@ export async function callCodex(
     timeBudgetMinutes?: number;
     apiKey?: string;
     instructionOverride?: string;
+    lixComplexity?: number;
   } = {},
 ): Promise<string> {
   const logger = getLogger();
@@ -37,6 +38,21 @@ export async function callCodex(
     instructions.push({
       type: "text" as const,
       text: `you SHOULD work efficiently and limit your analysis to what you can cover in at most ${options.timeBudgetMinutes} minutes; prioritize the most important issues first.`,
+    });
+  }
+
+  if (typeof options.lixComplexity === "number" && options.lixComplexity > 0) {
+    const getLixDescription = (lix: number): string => {
+      if (lix <= 30) return "very simple, clear language suitable for general audiences";
+      if (lix <= 40) return "normal, accessible language for most developers";
+      if (lix <= 50) return "moderate complexity with technical depth";
+      if (lix <= 60) return "technical and detailed language for experienced developers";
+      return "highly technical and complex language";
+    };
+
+    instructions.push({
+      type: "text" as const,
+      text: `Write your review comments with a target LIX readability score of approximately ${options.lixComplexity}, using ${getLixDescription(options.lixComplexity)}. Focus on clarity while maintaining technical accuracy.`,
     });
   }
 

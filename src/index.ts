@@ -137,6 +137,7 @@ async function obtainReviewJson(prompt: string, options: CliOptions): Promise<st
     timeBudgetMinutes: options.reviewTimeBudget,
     apiKey: openaiApiKey,
     instructionOverride: options.prompt,
+    lixComplexity: options.lixComplexity,
   });
 }
 

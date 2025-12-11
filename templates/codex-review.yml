@@ -10,6 +10,9 @@ parameters:
     default:
       - docs/**
       - "**/*.md"
+  - name: lixComplexity
+    type: string
+    default: ""
 
 stages:
   - stage: CodexReview
@@ -35,6 +38,9 @@ stages:
               if [ "$REVIEW_DRY_RUN" = "true" ]; then
                 ARGS="$ARGS --dry-run"
               fi
+              if [ -n "$LIX_COMPLEXITY" ]; then
+                ARGS="$ARGS --lix-complexity $LIX_COMPLEXITY"
+              fi
               npx @charlietango/az-pipeline-codex-review-agent@${{ parameters.packageVersion }} \
                 --review-time-budget "$REVIEW_TIME_BUDGET" \
                 --ignore-files '${{ join(parameters.ignoreFiles, "' --ignore-files '") }}' \
@@ -45,3 +51,4 @@ stages:
               AZURE_DEVOPS_PAT: $(System.AccessToken)
               REVIEW_TIME_BUDGET: ${{ parameters.reviewTimeBudget }}
               REVIEW_DRY_RUN: ${{ parameters.dryRun }}
+              LIX_COMPLEXITY: ${{ parameters.lixComplexity }}

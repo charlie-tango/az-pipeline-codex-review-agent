@@ -44,6 +44,12 @@ export const ArgsSchema = z.object({
   openaiApiKey: z.string().trim().min(1, "openai-api-key cannot be empty").optional(),
   ignoreFiles: z.array(z.string().trim().min(1)).optional().default([]),
   prompt: z.string().trim().optional(),
+  lixComplexity: z.coerce
+    .number()
+    .int("lix-complexity must be an integer")
+    .min(20, "lix-complexity must be at least 20")
+    .max(80, "lix-complexity must not exceed 80")
+    .optional(),
 });
 
 export type CliOptions = z.infer<typeof ArgsSchema>;
@@ -139,6 +145,11 @@ export function parseArgs(): CliOptions {
       description:
         "Glob patterns for files to ignore during review (repeatable). Matches are excluded from analysis.",
       default: [],
+    })
+    .option("lix-complexity", {
+      type: "number",
+      description:
+        "Optional target LIX readability score (20-80). Lower values request simpler language (20-30 = simple, 30-40 = normal, 40-50 = medium, 50-60 = difficult, 60+ = very difficult). If not specified, no readability constraint is applied.",
     })
     .help()
     .parseSync();

@@ -13,6 +13,6 @@
     }
   },
   "files": {
-    "ignore": ["dist/**/*", "node_modules/**/*"]
+    "ignore": ["dist/**/*", "node_modules/**/*", ".pnpm-store/**/*", "dist/**/*"]
   }
 }

@@ -14,6 +14,12 @@ importers:
       azure-devops-node-api:
         specifier: ^15.1.1
         version: 15.1.1
+      micromatch:
+        specifier: ^4.0.5
+        version: 4.0.8
+      simple-git:
+        specifier: ^3.21.0
+        version: 3.28.0
       yargs:
         specifier: ^17.7.2
         version: 17.7.2
@@ -24,6 +30,9 @@ importers:
       '@biomejs/biome':
         specifier: ^1.7.0
         version: 1.9.4
+      '@types/micromatch':
+        specifier: ^4.0.6
+        version: 4.0.10
       '@types/node':
         specifier: ^20.12.7
         version: 20.19.23
@@ -257,9 +266,21 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@kwsites/file-exists@1.1.1':
+    resolution: {integrity: sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==}
+
+  '@kwsites/promise-deferred@1.1.1':
+    resolution: {integrity: sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==}
+
   '@openai/codex-sdk@0.50.0':
     resolution: {integrity: sha512-qChQKK0wNOOiPqJ2U+4jP6suWsZeWhH+tVbyZeBzLZrJpsnvyJpAvNSH4jslCj+XQb0Q9yz2y4xgiGUEdF6XBg==}
     engines: {node: '>=18'}
+
+  '@types/braces@3.0.5':
+    resolution: {integrity: sha512-SQFof9H+LXeWNz8wDe7oN5zu7ket0qwMu5vZubW4GCJ8Kkeh6nBWUz87+KTz/G3Kqsrp0j/W253XJb3KMEeg3w==}
+
+  '@types/micromatch@4.0.10':
+    resolution: {integrity: sha512-5jOhFDElqr4DKTrTEbnW8DZ4Hz5LRUEmyrGpCMrD/NphYv3nUnaF08xmSLx1rGGnyEs/kFnhiw6dCgcDqMr5PQ==}
 
   '@types/node@20.19.23':
     resolution: {integrity: sha512-yIdlVVVHXpmqRhtyovZAcSy0MiPcYWGkoO4CGe/+jpP0hmNuihm4XhHbADpK++MsiLHP5MVlv+bcgdF99kSiFQ==}
@@ -750,6 +771,9 @@ packages:
     resolution: {integrity: sha512-WszCLXwT4h2k1ufIXAgsbiTOazqqevFCIncOuUBZJ91DdvWcC5+OFkluWRQPrcuSYd8fjq+o2y1QfWqYMoAToQ==}
     hasBin: true
 
+  simple-git@3.28.0:
+    resolution: {integrity: sha512-Rs/vQRwsn1ILH1oBUy8NucJlXmnnLeLCfcvbSehkPzbv3wwoFWIdtfd6Ndo6ZPhlPsCZ60CPI4rxurnwAa+a2w==}
+
   sisteransi@1.0.5:
     resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
 
@@ -981,7 +1005,21 @@ snapshots:
   '@esbuild/win32-x64@0.25.11':
     optional: true
 
+  '@kwsites/file-exists@1.1.1':
+    dependencies:
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
+
+  '@kwsites/promise-deferred@1.1.1': {}
+
   '@openai/codex-sdk@0.50.0': {}
+
+  '@types/braces@3.0.5': {}
+
+  '@types/micromatch@4.0.10':
+    dependencies:
+      '@types/braces': 3.0.5
 
   '@types/node@20.19.23':
     dependencies:
@@ -1473,6 +1511,14 @@ snapshots:
   signal-exit@4.1.0: {}
 
   simple-git-hooks@2.13.1: {}
+
+  simple-git@3.28.0:
+    dependencies:
+      '@kwsites/file-exists': 1.1.1
+      '@kwsites/promise-deferred': 1.1.1
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
 
   sisteransi@1.0.5: {}
 
